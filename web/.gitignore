@@ -1,0 +1,28 @@
+# Secrets and env files (never commit real values)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node and Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+npm-debug.log*
+
+# OS and editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
