@@ -29,10 +29,16 @@ repos:
       - id: ruff-format
         files: ^api/
 
-  # Frontend: prettier via prettier's official pre-commit mirror.
-  # (The old pre-commit/mirrors-prettier repo was archived in 2024, so do not use it.)
-  - repo: https://github.com/prettier/pre-commit
-    rev: v2.0.0
+  # Frontend: run the project's OWN Prettier (from web/package.json) via a local
+  # hook, so pre-commit and CI never drift. A pinned mirror bundles its own
+  # prettier version (e.g. prettier/pre-commit v2.0.0 ships prettier 2.0.0) which
+  # formats differently from web's prettier 3.x and fights CI. --ignore-unknown
+  # skips files prettier can't parse (svg, ico, .env). Needs `pnpm install` in web.
+  - repo: local
     hooks:
       - id: prettier
+        name: prettier (web)
+        entry: web/node_modules/.bin/prettier --write --ignore-unknown
+        language: system
         files: ^web/
+        exclude: ^web/pnpm-lock\.yaml$
