@@ -9,25 +9,27 @@ Status key: [ ] not started, [~] in progress, [x] done.
 
 ## M0. Scaffold and keys
 
-- [ ] Create the repo structure: `web/`, `api/`, `docs/` (docs already exist).
-- [ ] Scaffold the Next.js app in `web/` with pnpm (`pnpm create next-app`): App Router,
+- [x] Create the repo structure: `web/`, `api/`, `docs/` (docs already exist).
+- [x] Scaffold the Next.js app in `web/` with pnpm (`pnpm create next-app`): App Router,
       TypeScript, Tailwind. This generates `pnpm-lock.yaml`. Set the `packageManager` field in
       `web/package.json` (e.g. `pnpm@10.x`) and add `prettier` (plus optional
       `eslint-config-prettier`) to devDependencies. App runs with a placeholder page.
-- [ ] Set up the FastAPI app in `api/` with uv. Add runtime deps via
+- [x] Set up the FastAPI app in `api/` with uv. Add runtime deps via
       `uv add fastapi 'uvicorn[standard]' ...` and run `uv sync` to generate `uv.lock` (dev tools
       are already in pyproject). App runs with a health check endpoint.
-- [ ] Postgres connected. Migrations set up. Empty tables from the data model exist.
-- [ ] `.env.example` created. Finnhub key and DB URL wired up locally.
-- [ ] Tooling enforced in CI (uv + pnpm): `ruff` (lint + format) + `mypy` + `pytest` (api),
+- [~] Postgres connected. Migrations set up. Empty tables from the data model exist.
+      (Migrations authored and DB connectivity verified; `alembic upgrade head` is
+      blocked on a valid `DATABASE_URL` password, see the progress log.)
+- [x] `.env.example` created. Finnhub key and DB URL wired up locally.
+- [x] Tooling enforced in CI (uv + pnpm): `ruff` (lint + format) + `mypy` + `pytest` (api),
       `eslint` + `prettier` + `tsc` + build (web). GitHub Actions runs them on every push and PR.
       Config files provided: `.github/workflows/ci.yml`, `.pre-commit-config.yaml`,
       `api/pyproject.toml`, `api/.python-version`, `web/.prettierrc.json`. CI keys its caches off
       `api/uv.lock` and `web/pnpm-lock.yaml`, so those lockfiles must exist (the scaffold steps
       above generate them).
-- [ ] README written: what it is, how to run it, a one-paragraph architecture summary, and a
+- [x] README written: what it is, how to run it, a one-paragraph architecture summary, and a
       pointer to `docs/`.
-- [ ] Confirm a single Finnhub quote call works end to end (backend fetches, frontend shows it).
+- [x] Confirm a single Finnhub quote call works end to end (backend fetches, frontend shows it).
 
 Blockers to clear early: get a Finnhub API key, get a Postgres instance (local or hosted),
 and get an LLM API key ready for M3.
@@ -74,4 +76,8 @@ Goal: the core loop feels real and good before adding anything else.
 
 ## Progress log
 
-- (nothing yet) add a dated one-liner here each time a milestone lands.
+- 2026-07-10  M0 scaffolded end to end: Next.js 16 web + FastAPI/uv api, sync SQLAlchemy 2.0
+  and Alembic migrations for the core tables, and a market client showing a live Finnhub quote
+  on the home page. Tooling (ruff, mypy, pytest, eslint, prettier, tsc) is green locally.
+  Single seeded user with no real login is the M0-M1 plan; Supabase Auth lands in M2. Still
+  open: `alembic upgrade head` needs a valid `DATABASE_URL` password (current one fails auth).

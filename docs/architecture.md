@@ -39,6 +39,19 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
 Reset = set cash_balance back to starting_balance, delete holdings and transactions for
 that account.
 
+## Backend data layer and identity
+
+- Persistence is synchronous SQLAlchemy 2.0 with Alembic migrations, on the psycopg (v3)
+  driver (`postgresql+psycopg`). `DATABASE_URL` is a Supabase session-mode pooler URL
+  (a plain `postgresql://`); the driver is forced on in code, not in the env value. Sync
+  rather than async because the app is low-concurrency and the sim/analysis layers are
+  pure synchronous functions that are simplest to test and read that way. FastAPI runs
+  sync route handlers in a threadpool, so DB calls do not block the event loop.
+- Money is stored as `Numeric`/`Decimal`, never float, so balances stay exact.
+- Identity: for M0 and M1 there is a single seeded user and no login. Real auth (Supabase
+  Auth) arrives in M2. Integer surrogate keys for now; the user identity gets reconciled
+  with Supabase Auth's UUID when auth lands.
+
 ## Market data layer (`services/market/`)
 
 All Finnhub calls and all caching live here. Nothing else touches Finnhub.
