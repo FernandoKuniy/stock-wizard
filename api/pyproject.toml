@@ -4,7 +4,16 @@ version = "0.1.0"
 description = "Backend for the StockWiz paper-trading app"
 requires-python = ">=3.12"
 # App/runtime deps (fastapi, uvicorn, the db driver, etc.) get added in M0 with `uv add ...`.
-dependencies = []
+dependencies = [
+    "alembic>=1.18.5",
+    "fastapi>=0.139.0",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.4",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy>=2",
+    "uvicorn[standard]>=0.51.0",
+]
 
 [dependency-groups]
 # Dev tooling, managed with `uv add --dev <tool>`. Replaces the old requirements-dev.txt.
@@ -37,6 +46,10 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 # Do not fail on third-party libraries that ship no type stubs.
 ignore_missing_imports = true
+# Teach mypy about pydantic models (e.g. Settings fields populated from the env).
+plugins = ["pydantic.mypy"]
+# Alembic's env and migration scripts are generated boilerplate, not app code.
+exclude = ["^alembic/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
