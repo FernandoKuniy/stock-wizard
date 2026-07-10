@@ -21,7 +21,9 @@ repos:
 
   # Backend: ruff handles both linting (with autofix) and formatting.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    # Keep this in lockstep with the ruff version uv resolves (see api/uv.lock),
+    # so the hook and CI's `uv run ruff` never disagree on lint/format.
+    rev: v0.15.21
     hooks:
       - id: ruff
         args: [--fix]
