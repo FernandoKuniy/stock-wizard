@@ -1,0 +1,26 @@
+# Backend tool config. CI and pre-commit both read from here, so lint, format,
+# and type rules are identical locally and in CI.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Sensible and not noisy to start: pyflakes (F), pycodestyle (E, W), isort (I),
+# flake8-bugbear (B), pyupgrade (UP), comprehensions (C4). Add more as the code grows.
+select = ["E", "W", "F", "I", "B", "UP", "C4"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+# Do not fail on third-party libraries that ship no type stubs.
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
