@@ -1,4 +1,4 @@
-# StockSim (working name)
+# Stock Wizard
 
 A paper-trading web app that teaches first-time investors. Users invest fake money in
 real markets at real prices, and an AI tutor explains what's happening in plain English.
@@ -87,7 +87,7 @@ here is clean, well-tested, consistent code at the right scale.
   stay in their own layers and talk through clear function boundaries. No cross-layer
   reach-arounds.
 - Secrets only in env vars, never in code or git. Ship a `.env.example` with names, no values.
-- Commits are small, focused, and present-tense. One logical change per commit.
+- Commits are small and focused, one logical change each, and follow Conventional Commits.
 - Keep a real README: what it is, how to run it, a one-paragraph architecture summary, and a
   pointer to `docs/`. It is the first thing anyone sees, so make it good.
 
@@ -114,10 +114,25 @@ before locking it into the docs.
 - `docs/decisions.md` running log of decisions that diverge from the original plan
 - `docs/roadmap.md` the build plan and running progress log
 
-## Voice for all user-facing copy and commit messages
+## Voice for all user-facing copy
 
 - Casual and human. Write like a person, not a bank.
 - No em dashes. No corporate speak. No filler.
 - Short and concrete. Explain money in plain terms ("you'd have $120 more than you started"),
   not raw percentages alone.
-- Commit messages: plain, direct, present tense, no fluff.
+
+## Commit messages
+
+Use Conventional Commits: `type(optional scope): short description`, present tense,
+lowercase description, no trailing period.
+
+- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `build`, `perf`, `style`.
+- Keep the subject under ~72 characters. Add a body only when the change needs context.
+- One logical change per commit.
+- Breaking changes: add `!` after the type (e.g. `feat!:`) or a `BREAKING CHANGE:` footer.
+- Keep the plain, no-fluff tone. No em dashes.
+
+Examples:
+- `feat(portfolio): add benchmark line vs the S&P 500`
+- `fix(market): handle Finnhub rate-limit errors gracefully`
+- `chore: add project docs, CI, and tooling config`
