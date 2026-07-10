@@ -10,15 +10,21 @@ Status key: [ ] not started, [~] in progress, [x] done.
 ## M0. Scaffold and keys
 
 - [ ] Create the repo structure: `web/`, `api/`, `docs/` (docs already exist).
-- [ ] Next.js app in `web/` runs with a placeholder page.
-- [ ] FastAPI app in `api/` runs with a health check endpoint.
+- [ ] Scaffold the Next.js app in `web/` with pnpm (`pnpm create next-app`): App Router,
+      TypeScript, Tailwind. This generates `pnpm-lock.yaml`. Set the `packageManager` field in
+      `web/package.json` (e.g. `pnpm@10.x`) and add `prettier` (plus optional
+      `eslint-config-prettier`) to devDependencies. App runs with a placeholder page.
+- [ ] Set up the FastAPI app in `api/` with uv. Add runtime deps via
+      `uv add fastapi 'uvicorn[standard]' ...` and run `uv sync` to generate `uv.lock` (dev tools
+      are already in pyproject). App runs with a health check endpoint.
 - [ ] Postgres connected. Migrations set up. Empty tables from the data model exist.
 - [ ] `.env.example` created. Finnhub key and DB URL wired up locally.
-- [ ] Tooling wired up and enforced in CI: `ruff` (lint + format) + `mypy` + `pytest` (api),
+- [ ] Tooling enforced in CI (uv + pnpm): `ruff` (lint + format) + `mypy` + `pytest` (api),
       `eslint` + `prettier` + `tsc` + build (web). GitHub Actions runs them on every push and PR.
-      Config files are provided: `.github/workflows/ci.yml`, `.pre-commit-config.yaml`,
-      `api/pyproject.toml`, `api/requirements-dev.txt`, `web/.prettierrc.json`. Add `prettier`
-      (and optionally `eslint-config-prettier`) to `web`'s devDependencies so the version is pinned.
+      Config files provided: `.github/workflows/ci.yml`, `.pre-commit-config.yaml`,
+      `api/pyproject.toml`, `api/.python-version`, `web/.prettierrc.json`. CI keys its caches off
+      `api/uv.lock` and `web/pnpm-lock.yaml`, so those lockfiles must exist (the scaffold steps
+      above generate them).
 - [ ] README written: what it is, how to run it, a one-paragraph architecture summary, and a
       pointer to `docs/`.
 - [ ] Confirm a single Finnhub quote call works end to end (backend fetches, frontend shows it).

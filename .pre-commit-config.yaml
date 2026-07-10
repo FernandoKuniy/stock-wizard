@@ -1,5 +1,5 @@
 # Fast checks on staged files before every commit.
-# One-time setup:  pip install pre-commit  &&  pre-commit install
+# One-time setup:  uv tool install pre-commit  &&  pre-commit install
 #
 # The heavier checks (mypy, pytest, tsc, next build) run in CI, not here, so
 # commits stay fast. Keep the pinned revs below roughly aligned with CI by

@@ -35,15 +35,17 @@ Simulation only, real market data, education first.
   why we do not use Alpaca's paper engine per user.)
 - AI tutor: an LLM with read-only tool-calling over the user's portfolio. The tools return
   code-computed figures; the LLM narrates.
+- Package managers: uv for Python, pnpm for the frontend. Always use these, never pip or npm.
 
 ## Commands
 
 Fill these in as the project takes shape. Keep them exact so Claude Code runs them verbatim.
 
-- Frontend dev: `cd web && npm run dev`
-- Backend dev: `cd api && uvicorn main:app --reload`
-- Backend tests: `cd api && pytest`
-- Lint/format: TBD
+- Frontend dev: `cd web && pnpm dev`
+- Backend dev: `cd api && uv run uvicorn main:app --reload`
+- Backend tests: `cd api && uv run pytest`
+- Lint/format (api): `uv run ruff check .` and `uv run ruff format .`
+- Lint/format (web): `pnpm lint` and `pnpm exec prettier --write .`
 
 ## Project layout
 

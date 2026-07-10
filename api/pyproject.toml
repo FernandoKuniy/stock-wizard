@@ -1,5 +1,22 @@
-# Backend tool config. CI and pre-commit both read from here, so lint, format,
-# and type rules are identical locally and in CI.
+[project]
+name = "stockwiz-api"
+version = "0.1.0"
+description = "Backend for the StockWiz paper-trading app"
+requires-python = ">=3.12"
+# App/runtime deps (fastapi, uvicorn, the db driver, etc.) get added in M0 with `uv add ...`.
+dependencies = []
+
+[dependency-groups]
+# Dev tooling, managed with `uv add --dev <tool>`. Replaces the old requirements-dev.txt.
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.0",
+]
+
+[tool.uv]
+# This is an application, not a distributable library, so uv should not try to build/install it.
+package = false
 
 [tool.ruff]
 target-version = "py312"
@@ -23,4 +40,5 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-q"

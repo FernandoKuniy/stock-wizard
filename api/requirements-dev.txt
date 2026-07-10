@@ -1,7 +1,0 @@
-# Backend dev tooling. Keep the ruff version roughly in sync with the
-# ruff-pre-commit rev in .pre-commit-config.yaml (run `pre-commit autoupdate`).
-# App/runtime deps (fastapi, uvicorn, the db driver, etc.) go in requirements.txt
-# during M0, not here.
-ruff>=0.8
-mypy>=1.13
-pytest>=8.0
