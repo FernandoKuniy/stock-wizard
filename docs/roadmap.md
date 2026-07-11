@@ -17,9 +17,7 @@ Status key: [ ] not started, [~] in progress, [x] done.
 - [x] Set up the FastAPI app in `api/` with uv. Add runtime deps via
       `uv add fastapi 'uvicorn[standard]' ...` and run `uv sync` to generate `uv.lock` (dev tools
       are already in pyproject). App runs with a health check endpoint.
-- [~] Postgres connected. Migrations set up. Empty tables from the data model exist.
-      (Migrations authored and DB connectivity verified; `alembic upgrade head` is
-      blocked on a valid `DATABASE_URL` password, see the progress log.)
+- [x] Postgres connected. Migrations set up. Empty tables from the data model exist.
 - [x] `.env.example` created. Finnhub key and DB URL wired up locally.
 - [x] Tooling enforced in CI (uv + pnpm): `ruff` (lint + format) + `mypy` + `pytest` (api),
       `eslint` + `prettier` + `tsc` + build (web). GitHub Actions runs them on every push and PR.
@@ -76,8 +74,8 @@ Goal: the core loop feels real and good before adding anything else.
 
 ## Progress log
 
-- 2026-07-10  M0 scaffolded end to end: Next.js 16 web + FastAPI/uv api, sync SQLAlchemy 2.0
-  and Alembic migrations for the core tables, and a market client showing a live Finnhub quote
-  on the home page. Tooling (ruff, mypy, pytest, eslint, prettier, tsc) is green locally.
-  Single seeded user with no real login is the M0-M1 plan; Supabase Auth lands in M2. Still
-  open: `alembic upgrade head` needs a valid `DATABASE_URL` password (current one fails auth).
+- 2026-07-10  M0 complete: Next.js 16 web + FastAPI/uv api, sync SQLAlchemy 2.0 with Alembic
+  migrations applied to Supabase (users, accounts, holdings, transactions), and a market client
+  showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
+  tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
+  lands in M2.
