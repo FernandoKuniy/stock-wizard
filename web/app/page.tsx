@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AllocationChart } from "@/components/AllocationChart";
 import { HoldingsTable } from "@/components/HoldingsTable";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
@@ -49,6 +51,12 @@ export default async function Home() {
             </p>
           </div>
         )}
+
+        <div>
+          <Link href="/transactions" className="text-sm text-zinc-500 hover:underline">
+            See your transaction history →
+          </Link>
+        </div>
       </div>
 
       <p className="mt-10 text-center text-xs text-zinc-500">
