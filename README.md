@@ -7,20 +7,21 @@ education first. It is a simulation for learning, not financial advice.
 
 ## Status
 
-M0 (scaffold and keys) is in place: both apps run, the database schema is defined as
-Alembic migrations, and a live Finnhub quote flows end to end from the market API
-through the backend to the home page. The trading loop and the AI tutor come next.
-See [docs/roadmap.md](docs/roadmap.md) for the plan and progress.
+M1 (the core trading loop) works end to end: a funded $100k demo account, ticker search,
+a stock page with a live price chart, market buy/sell by dollar amount or share quantity
+(fractional shares included), a portfolio dashboard with an allocation chart, transaction
+history, and a reset button. The AI tutor comes next. See [docs/roadmap.md](docs/roadmap.md)
+for the plan and progress.
 
 ## Architecture
 
 Two apps. `web/` is a Next.js (App Router) + TypeScript + Tailwind frontend. `api/`
 is a Python + FastAPI backend on Postgres. The backend splits into clear layers under
-`api/services/`: `market/` is the only thing that talks to Finnhub (and caches it),
-`sim/` runs the paper-trading engine, `analysis/` does the deterministic portfolio
-math, and `tutor/` is the AI layer. One rule holds it together: every number comes
-from code, and the LLM only ever explains figures the code already computed. More in
-[docs/architecture.md](docs/architecture.md).
+`api/services/`: `market/` is the only thing that talks to the data providers (Finnhub for
+quotes, profiles, and search; Twelve Data for price candles) and caches them, `sim/` runs the
+paper-trading engine, `analysis/` does the deterministic portfolio math, and `tutor/` will be
+the AI layer. One rule holds it together: every number comes from code, and the LLM only ever
+explains figures the code already computed. More in [docs/architecture.md](docs/architecture.md).
 
 ## Running it locally
 
@@ -39,6 +40,9 @@ cp api/.env.example api/.env
 - `DATABASE_URL`: a Postgres connection string. We use a Supabase session-mode pooler
   URL (a plain `postgresql://...`). Percent-encode any special characters in the
   password, or auth will fail.
+- `TWELVE_DATA_API_KEY`: optional, a free key from [twelvedata.com](https://twelvedata.com/).
+  Only the price charts need it; everything else works without it (Finnhub's free tier no
+  longer serves historical candles).
 
 ### 2. Database
 
@@ -48,15 +52,24 @@ Create the tables:
 cd api && uv run alembic upgrade head
 ```
 
-### 3. Backend
+### 3. Seed the demo account
+
+Create the single funded account (idempotent; runs until real auth lands in M2):
+
+```bash
+cd api && uv run python -m seed
+```
+
+### 4. Backend
 
 ```bash
 cd api && uv run uvicorn main:app --reload
 ```
 
-Runs on http://localhost:8000. Health check at `/health`, quotes at `/api/quote/AAPL`.
+Runs on http://localhost:8000. Health check at `/health`; the portfolio, search, stock,
+orders, transactions, and reset routes live under `/api`.
 
-### 4. Frontend
+### 5. Frontend
 
 ```bash
 cd web && pnpm install && pnpm dev

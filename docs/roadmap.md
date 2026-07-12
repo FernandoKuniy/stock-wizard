@@ -34,15 +34,17 @@ and get an LLM API key ready for M3.
 
 ## M1. Core trading loop (no AI yet)
 
-- [ ] Fake account with a $100,000 starting balance.
-- [ ] Ticker search and a stock page: price, simple chart, one-line company blurb.
-- [ ] Buy (market order) fills at latest quote, debits cash, creates a holding.
-- [ ] Sell (market order) credits cash, reduces/removes the holding.
-- [ ] Portfolio dashboard: holdings, total value, cash, total gain/loss, one chart. This is
-      the default landing screen.
-- [ ] Transaction history.
-- [ ] Reset button.
-- [ ] Market client caching in place so we stay under the free tier.
+- [x] Fake account with a $100,000 starting balance.
+- [x] Ticker search and a stock page: price, simple chart (Twelve Data candles), one-line
+      company blurb.
+- [x] Buy (market order) fills at latest quote, debits cash, creates a holding. Sized by
+      dollar amount or share quantity, fractional shares allowed.
+- [x] Sell (market order) credits cash, reduces/removes the holding.
+- [x] Portfolio dashboard: holdings, total value, cash, total gain/loss, one chart (an
+      allocation donut). This is the default landing screen.
+- [x] Transaction history.
+- [x] Reset button.
+- [x] Market client caching in place so we stay under the free tier.
 
 Goal: the core loop feels real and good before adding anything else.
 
@@ -79,3 +81,9 @@ Goal: the core loop feels real and good before adding anything else.
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
   tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
   lands in M2.
+- 2026-07-12  M1 complete: the core trading loop works end to end. A seeded $100k demo account,
+  ticker search and a stock page (Finnhub quote/profile, Twelve Data price chart), market
+  buy/sell by dollars or shares with fractional fills, a portfolio dashboard (totals, gain/loss,
+  allocation donut), transaction history, and reset. Numbers come from a new deterministic
+  analysis layer; a minimal subset (value, P/L, weights) shipped now, the rest lands with the
+  tutor in M3. Verified end to end against live Finnhub + Twelve Data.

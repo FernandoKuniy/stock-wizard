@@ -19,8 +19,10 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
    intimidating than odd ones.
 2. Search a ticker, land on a stock page with: current price, a simple price chart, and a
    one-line plain-English "what is this company" blurb.
-3. Buy and sell. Market orders only to start. Fill at the latest quote.
-4. Portfolio dashboard: holdings, total value, cash left, total gain/loss, one clean chart.
+3. Buy and sell. Market orders only to start, filled at the latest quote. Sized by dollar
+   amount or share quantity, with fractional shares (the beginner-friendly default).
+4. Portfolio dashboard: holdings, total value, cash left, total gain/loss, one clean chart
+   (an allocation donut for now; the value-over-time line lands with the benchmark in M2).
    This is the screen that answers "how am I doing?" and it should be the default landing view.
 5. Transaction history.
 6. Reset button. Huge for beginners. Let them wipe the slate and start over with no fear.

@@ -27,9 +27,10 @@ Simulation only, real market data, education first.
 
 - Frontend: Next.js (App Router) + TypeScript + Tailwind. Charts with Recharts.
 - Backend: Python + FastAPI. Postgres for users, cash balances, holdings, transactions.
-- Market data: Finnhub for quotes, historical candles, company profiles, and news. Any
-  provider works behind the market client; Finnhub has the friendliest free tier for a
-  live app (60 calls/min, free real-time US quotes, news included).
+- Market data: Finnhub for quotes, company profiles, symbol search, and news (60 calls/min
+  free, real-time US quotes). Twelve Data for historical price candles, since Finnhub's free
+  tier dropped them. Any provider works behind the market client, and all providers stay
+  inside `services/market/`.
 - Simulation: we run our own. Market orders fill at the latest quote. No third-party
   execution engine, which keeps it simple and multi-user native. (See architecture.md for
   why we do not use Alpaca's paper engine per user.)
@@ -43,6 +44,7 @@ Fill these in as the project takes shape. Keep them exact so Claude Code runs th
 
 - Frontend dev: `cd web && pnpm dev`
 - Backend dev: `cd api && uv run uvicorn main:app --reload`
+- Seed the demo account (once): `cd api && uv run python -m seed`
 - Backend tests: `cd api && uv run pytest`
 - Lint/format (api): `uv run ruff check .` and `uv run ruff format .`
 - Lint/format (web): `pnpm lint` and `pnpm exec prettier --write .`

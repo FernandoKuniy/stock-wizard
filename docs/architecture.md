@@ -47,21 +47,32 @@ that account.
   rather than async because the app is low-concurrency and the sim/analysis layers are
   pure synchronous functions that are simplest to test and read that way. FastAPI runs
   sync route handlers in a threadpool, so DB calls do not block the event loop.
-- Money is stored as `Numeric`/`Decimal`, never float, so balances stay exact.
+- Money is stored as `Numeric`/`Decimal`, never float, so balances stay exact. Figures cross
+  the HTTP boundary as JSON numbers rounded for display (money to cents), while all math stays
+  in `Decimal` server-side. The frontend only formats; it never recomputes a figure.
+- The engine and a per-request `get_db` session dependency live in `db.py`; route handlers
+  (and the sim) own the transaction boundary and commit explicitly. `seed.py` idempotently
+  creates the single funded demo account (`uv run python -m seed`).
 - Identity: for M0 and M1 there is a single seeded user and no login. Real auth (Supabase
   Auth) arrives in M2. Integer surrogate keys for now; the user identity gets reconciled
   with Supabase Auth's UUID when auth lands.
 
 ## Market data layer (`services/market/`)
 
-All Finnhub calls and all caching live here. Nothing else touches Finnhub.
+All external data calls and all caching live here. Nothing else touches a provider.
 
-- Quotes: current price for a symbol. Cache with a short TTL (a few seconds to a minute is
-  fine for an educational app, and the free tier is delayed anyway).
-- Candles: historical bars for charts. Cache longer (these do not change intraday for past
-  days).
-- Company profile: name, sector, logo, description. Cache for a long time (rarely changes).
-- News: recent articles per symbol. Cache for minutes.
+- Quotes: current price for a symbol, from Finnhub. Cache with a short TTL (a few seconds to a
+  minute is fine for an educational app, and the free tier is delayed anyway).
+- Candles: historical daily bars for charts, from Twelve Data. Finnhub's free tier no longer
+  serves `/stock/candle` (it 403s), so a second provider sits behind the market client for
+  candles; it uses `TWELVE_DATA_API_KEY` (optional, only charts need it). Cache longer (past
+  days do not change intraday).
+- Company profile and symbol search: from Finnhub. The profile drives a plain-language,
+  code-composed "what is this company" blurb (no LLM). Cache profiles for a long time.
+- News: recent articles per symbol (later). Cache for minutes.
+
+Both providers sit behind one `MarketError` contract, so no raw provider error reaches the
+user and swapping a provider stays a market-layer change.
 
 Caching rules that keep us under the free tier:
 
@@ -72,22 +83,33 @@ Caching rules that keep us under the free tier:
 
 ## Simulation layer (`services/sim/`)
 
-The paper-trading engine. Pure, testable functions:
+The paper-trading engine. Pure, testable functions over the database session:
 
-- `buy(account, symbol, quantity)`: get latest quote, verify cash, debit cash, upsert
-  holding (recompute avg_cost), write a transaction.
-- `sell(account, symbol, quantity)`: verify shares held, credit cash, reduce/remove holding,
-  write a transaction.
-- `reset(account)`: restore starting balance, clear holdings and transactions.
+- `buy(session, account, symbol, *, quantity | amount, market)`: get the latest quote; size the
+  order by share `quantity` or dollar `amount` (shares = amount / price, computed here in code);
+  verify cash; debit cash; upsert the holding (recompute the weighted avg_cost); write a
+  transaction.
+- `sell(session, account, symbol, *, quantity | amount, market)`: verify shares held, credit
+  cash, reduce or remove the holding, write a transaction. A dollar-sized sell caps at the
+  position.
+- `reset(session, account)`: restore the starting balance, clear holdings and transactions.
 
-Keep this layer free of HTTP and framework code so it is easy to unit test.
+Shares are held to 6 decimals and always round down, so a fill never spends more than the cash
+or dollar amount asked; money is quantized to 4 decimals. Failures are typed `SimError`s
+(insufficient funds/shares, invalid order) with user-safe messages. The functions flush but do
+not commit, so the caller owns the transaction boundary. Keep this layer free of HTTP and
+framework code so it is easy to unit test.
 
 ## Analysis layer (`services/analysis/`) — the "numbers"
 
 This is the source of truth for every figure the UI or the AI shows. All deterministic
 Python. No LLM anywhere near it.
 
-Operators to build:
+The M1 subset is built and unit-tested (portfolio value, per-position and total profit/loss,
+position weights), so the dashboard's numbers come from code. The rest lands in M3 with the
+tutor.
+
+Operators:
 
 - Total portfolio value = cash + sum(quantity * current price).
 - Total and per-position profit/loss, absolute and percent.
