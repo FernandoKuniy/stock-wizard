@@ -1,4 +1,4 @@
-"""Unit tests for the market client: parsing, caching, and error handling.
+"""Unit tests for the Finnhub client: parsing, caching, and error handling.
 
 All Finnhub calls are faked with an ``httpx.MockTransport`` so tests never touch
 the network or burn quota.
@@ -77,3 +77,87 @@ def test_network_error_raises_market_error() -> None:
     client = _client_with(httpx.MockTransport(handler))
     with pytest.raises(MarketError):
         client.get_quote("AAPL")
+
+
+def _search_payload() -> dict[str, object]:
+    return {
+        "count": 3,
+        "result": [
+            {"symbol": "AAPL", "description": "APPLE INC", "type": "Common Stock"},
+            {"symbol": "", "description": "NO SYMBOL", "type": "Common Stock"},
+            {"symbol": "APLE", "description": "APPLE HOSPITALITY REIT", "type": "Common Stock"},
+        ],
+    }
+
+
+def test_search_parses_and_skips_incomplete_rows() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["q"] == "apple"
+        return httpx.Response(200, json=_search_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+    matches = client.search("apple")
+
+    assert [m.symbol for m in matches] == ["AAPL", "APLE"]
+    assert matches[0].description == "APPLE INC"
+
+
+def test_search_blank_query_skips_the_network() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=_search_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+    assert client.search("   ") == []
+    assert calls == 0
+
+
+def _profile_payload() -> dict[str, object]:
+    return {
+        "name": "Apple Inc",
+        "ticker": "AAPL",
+        "exchange": "NASDAQ NMS - GLOBAL MARKET",
+        "finnhubIndustry": "Technology",
+        "logo": "https://logo.test/aapl.png",
+        "marketCapitalization": 2_900_000.0,
+    }
+
+
+def test_get_profile_parses_and_builds_blurb() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["symbol"] == "AAPL"
+        return httpx.Response(200, json=_profile_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+    profile = client.get_profile("aapl")
+
+    assert profile.name == "Apple Inc"
+    assert profile.industry == "Technology"
+    assert "Technology" in profile.blurb
+    assert profile.market_cap == 2_900_000.0 * 1_000_000
+
+
+def test_profile_is_cached() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=_profile_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+    client.get_profile("AAPL")
+    client.get_profile("AAPL")
+    assert calls == 1
+
+
+def test_unknown_profile_raises_market_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    client = _client_with(httpx.MockTransport(handler))
+    with pytest.raises(MarketError):
+        client.get_profile("NOPE")
