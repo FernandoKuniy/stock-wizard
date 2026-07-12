@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
+
+import { TickerSearch } from "@/components/TickerSearch";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,7 +28,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <header className="border-b border-zinc-200 dark:border-zinc-800">
+          <div className="mx-auto flex w-full max-w-4xl items-center gap-4 px-6 py-3">
+            <Link href="/" className="font-semibold tracking-tight whitespace-nowrap">
+              Stock Wizard
+            </Link>
+            <div className="flex-1">
+              <TickerSearch />
+            </div>
+          </div>
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
