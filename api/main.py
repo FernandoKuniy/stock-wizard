@@ -280,7 +280,10 @@ def _txn_out(txn: Transaction) -> TransactionOut:
 
 
 def _round2(value: Decimal) -> float:
-    return float(value.quantize(_CENTS, rounding=ROUND_HALF_UP))
+    # Normalize -0.0 to 0.0: a tiny sub-cent residual from a fractional fill can
+    # round to negative zero, which is correct but reads oddly in the JSON.
+    rounded = float(value.quantize(_CENTS, rounding=ROUND_HALF_UP))
+    return rounded if rounded != 0 else 0.0
 
 
 def _shares(value: Decimal) -> float:

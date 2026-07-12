@@ -8,6 +8,7 @@ without touching Finnhub, Twelve Data, or Postgres.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from db import get_db
 from deps import get_current_account
-from main import app
+from main import _round2, app
 from models import Account
 from seed import seed_demo_account
 from services.market.candles import CandlePoint, Candles, get_candle_client
@@ -154,3 +155,9 @@ def test_reset_clears_everything(client: TestClient) -> None:
     assert reset.json()["cash"] == 100000.0
     assert reset.json()["holdings"] == []
     assert client.get("/api/transactions").json() == []
+
+
+def test_round2_normalizes_negative_zero() -> None:
+    # A sub-cent negative residual must not surface as -0.0 in the JSON.
+    assert _round2(Decimal("-0.0001")) == 0.0
+    assert str(_round2(Decimal("-0.0001"))) == "0.0"
