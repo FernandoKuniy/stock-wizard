@@ -4,6 +4,7 @@ Values are loaded from the environment, or from `api/.env` in local development.
 Never log or echo these values: they hold secrets (the Finnhub key and the DB URL).
 """
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,8 +22,15 @@ class Settings(BaseSettings):
 
     finnhub_api_key: str
     database_url: str
+    # Twelve Data serves the historical candles Finnhub's free tier no longer does.
+    # Optional: the app still runs without it; only the price charts need it.
+    twelve_data_api_key: str | None = None
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
+    # The single seeded account used until real auth lands in M2.
+    seed_user_email: str = "demo@stockwizard.local"
+    # Fake starting cash for a new account. A round number feels less intimidating.
+    starting_balance: Decimal = Decimal("100000")
 
     @property
     def sqlalchemy_url(self) -> str:
