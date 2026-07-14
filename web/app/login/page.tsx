@@ -20,7 +20,7 @@ export default function LoginPage() {
         You get $100,000 of fake money and real market prices. Nothing here costs you a cent.
       </p>
 
-      <form className="mt-8 space-y-4">
+      <form action={submit} className="mt-8 space-y-4">
         <div>
           <label htmlFor="email" className="text-sm text-zinc-500">
             Email
@@ -58,7 +58,6 @@ export default function LoginPage() {
             type="submit"
             name="intent"
             value="signin"
-            formAction={submit}
             disabled={pending}
             className="flex-1 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
@@ -68,7 +67,6 @@ export default function LoginPage() {
             type="submit"
             name="intent"
             value="signup"
-            formAction={submit}
             disabled={pending}
             className="flex-1 rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
           >
