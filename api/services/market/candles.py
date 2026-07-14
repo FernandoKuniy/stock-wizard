@@ -19,7 +19,10 @@ from services.market.cache import TtlCache
 from services.market.client import MarketError
 
 TWELVE_DATA_BASE_URL = "https://api.twelvedata.com"
-CANDLE_TTL_SECONDS = 60.0 * 60.0
+# Daily bars only change once a day, after the close, so holding them for hours costs us
+# nothing in freshness and saves a lot of quota. The free tier allows 8 calls a minute, and
+# drawing the portfolio history needs one call per symbol ever held, plus one for the index.
+CANDLE_TTL_SECONDS = 60.0 * 60.0 * 6.0
 # What a caller gets if they don't ask for more: about a quarter, which is what the
 # stock page's price chart shows.
 DEFAULT_OUTPUTSIZE = 90
