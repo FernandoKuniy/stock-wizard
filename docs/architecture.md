@@ -29,7 +29,7 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
 
 ## Data model (starting point)
 
-- `users`: id, email, created_at.
+- `users`: id, auth_id (the Supabase Auth user id, unique), email, created_at.
 - `accounts`: id, user_id, cash_balance, starting_balance, created_at. (One per user for
   now. The starting_balance lets us compute total return and power the reset.)
 - `holdings`: id, account_id, symbol, quantity, avg_cost. (avg_cost drives per-position P/L.)
@@ -53,9 +53,41 @@ that account.
 - The engine and a per-request `get_db` session dependency live in `db.py`; route handlers
   (and the sim) own the transaction boundary and commit explicitly. `seed.py` idempotently
   creates the single funded demo account (`uv run python -m seed`).
-- Identity: for M0 and M1 there is a single seeded user and no login. Real auth (Supabase
-  Auth) arrives in M2. Integer surrogate keys for now; the user identity gets reconciled
-  with Supabase Auth's UUID when auth lands.
+- Identity: users sign in with Supabase Auth (email and password). See "Auth" below.
+
+## Auth
+
+Supabase Auth owns sign-up, sign-in, and sessions. We own authorization.
+
+- The frontend uses `@supabase/ssr`. `proxy.ts` (Next.js 16's rename of `middleware.ts`)
+  refreshes the session on every request and bounces signed-out visitors to `/login`. It
+  decides who someone is with `getClaims()`, which verifies the token's signature;
+  `getSession()` does not, and is never trusted for that on the server.
+- Every call to our API carries the user's access token as a bearer token. The token comes
+  from a different place depending on where the code runs (server component vs browser), so
+  `lib/api.ts` takes it as an argument instead of guessing at runtime.
+- The API verifies the token itself, locally, against the project's public JWKS
+  (`/auth/v1/.well-known/jwks.json`). Supabase signs with an asymmetric key (ES256), so the
+  backend holds no shared secret and never calls Supabase to check a request. Only ES256 and
+  RS256 are accepted: the legacy shared HS256 secret is rejected outright, so a leaked secret
+  could not mint a token we would trust. Claims checked: signature, `exp`, `iss`, `aud`, `sub`.
+- `users.auth_id` (the token's `sub`) is the real identity. `email` is a display copy and is
+  no longer unique, since Supabase owns email uniqueness. Integer surrogate keys stay.
+- Accounts open themselves: the first time someone signs in, `services/sim/accounts.py` gives
+  them a user row and a funded account. `seed.py` is now just a manual top-up for an account
+  that already exists (`uv run python -m seed --email you@example.com`).
+
+**IMPORTANT: Supabase Row Level Security does not protect these tables.** We reach Postgres
+over a direct connection (the session pooler), not through PostgREST, so RLS never runs.
+Authorization lives entirely in the API layer: a request resolves to exactly one account, and
+every query is scoped to it. If a route ever reads a table without scoping to
+`get_current_account`, that is a data leak, and nothing in the database will stop it. A test
+in `tests/test_api.py` holds the line by proving one user's trades never appear in another's
+portfolio.
+
+Everything under `/api` requires a token, including the market-data routes: they do not touch
+an account, but they do spend our Finnhub and Twelve Data quota. `/health` is the only open
+endpoint.
 
 ## Market data layer (`services/market/`)
 
@@ -145,8 +177,11 @@ tutor behind an interface so the provider is not baked in.
 
 ## Secrets and config
 
-- `FINNHUB_API_KEY`, `DATABASE_URL`, and the LLM API key live in `.env`, gitignored.
-- Provide a `.env.example` with the variable names and no values.
+- `FINNHUB_API_KEY`, `DATABASE_URL`, and the LLM API key live in `api/.env`, gitignored.
+- `SUPABASE_URL` (api) and `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  (web) are public, not secrets: they locate the project and let a caller start an auth flow.
+  The publishable key is safe in the browser. The secret key never goes near the frontend.
+- Provide a `.env.example` in both `api/` and `web/` with the variable names and no values.
 
 ## Testing approach
 

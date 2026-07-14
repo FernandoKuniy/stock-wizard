@@ -48,12 +48,28 @@ and get an LLM API key ready for M3.
 
 Goal: the core loop feels real and good before adding anything else.
 
-## M2. Education layer
+## M2a. Accounts and auth
 
+Auth comes before the education layer so the rest of the UI is never built on the
+single-seeded-user assumption. The docs always said auth lands in M2; this is that.
+
+- [x] Supabase Auth (email + password): login screen, session refresh, sign out.
+- [x] `users.auth_id` links a row to its Supabase Auth user; email is no longer the identity.
+- [x] The API verifies access tokens locally against the project's JWKS (ES256).
+- [x] Every route is scoped to the signed-in user's account, with a test proving two users
+      cannot see each other's money. RLS does not cover these tables, so this layer is the
+      only thing enforcing it (see architecture.md).
+- [x] Accounts open themselves, funded, on first sign-in. `seed.py` becomes a manual top-up.
+
+## M2b. Education layer
+
+- [ ] Backdated demo history, so the benchmark line has a real curve to teach with.
+- [ ] Benchmark line: portfolio vs S&P 500 over the same period. High priority.
 - [ ] Jargon tooltips (P/E, market cap, dividend yield, volume, etc.).
 - [ ] First-time contextual explainers for new concepts.
 - [ ] Plain-language money framing across the UI ("you made $240", not just "up 2.4%").
-- [ ] Benchmark line: portfolio vs S&P 500 over the same period. High priority.
+- [ ] Fix: a failed quote silently drops a holding from the portfolio totals, so one flaky
+      Finnhub call reads as a big fake loss.
 
 ## M3. AI tutor
 
@@ -81,6 +97,12 @@ Goal: the core loop feels real and good before adding anything else.
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
   tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
   lands in M2.
+- 2026-07-14  M2a complete: real auth. Supabase Auth (email + password) on the frontend, with
+  session refresh in `proxy.ts` and a login screen; the API verifies access tokens locally
+  against the project's ES256 JWKS and scopes every route to the signed-in user's account.
+  Accounts now open themselves, funded, on first sign-in. Note for anyone reading later:
+  Supabase RLS does NOT protect these tables (we go straight to Postgres, not through
+  PostgREST), so the API's account scoping is the only thing keeping users apart.
 - 2026-07-12  M1 complete: the core trading loop works end to end. A seeded $100k demo account,
   ticker search and a stock page (Finnhub quote/profile, Twelve Data price chart), market
   buy/sell by dollars or shares with fractional fills, a portfolio dashboard (totals, gain/loss,

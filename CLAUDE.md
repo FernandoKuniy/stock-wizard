@@ -27,6 +27,11 @@ Simulation only, real market data, education first.
 
 - Frontend: Next.js (App Router) + TypeScript + Tailwind. Charts with Recharts.
 - Backend: Python + FastAPI. Postgres for users, cash balances, holdings, transactions.
+- Auth: Supabase Auth (email + password). The API verifies access tokens locally against the
+  project's public JWKS. IMPORTANT: Supabase RLS does NOT protect our tables (we connect
+  straight to Postgres, not through PostgREST), so every route must scope its queries to
+  `get_current_account`. That scoping is the only thing keeping one user's money out of
+  another's. See architecture.md.
 - Market data: Finnhub for quotes, company profiles, symbol search, and news (60 calls/min
   free, real-time US quotes). Twelve Data for historical price candles, since Finnhub's free
   tier dropped them. Any provider works behind the market client, and all providers stay
@@ -44,7 +49,8 @@ Fill these in as the project takes shape. Keep them exact so Claude Code runs th
 
 - Frontend dev: `cd web && pnpm dev`
 - Backend dev: `cd api && uv run uvicorn main:app --reload`
-- Seed the demo account (once): `cd api && uv run python -m seed`
+- Top up an account: `cd api && uv run python -m seed --email you@example.com` (accounts open
+  themselves, funded, on first sign-in, so this is only for topping one up by hand)
 - Backend tests: `cd api && uv run pytest`
 - Lint/format (api): `uv run ruff check .` and `uv run ruff format .`
 - Lint/format (web): `pnpm lint` and `pnpm exec prettier --write .`
