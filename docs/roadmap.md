@@ -48,7 +48,7 @@ and get an LLM API key ready for M3.
 
 Goal: the core loop feels real and good before adding anything else.
 
-## M2a. Accounts and auth
+## M2a. Accounts and auth  [~ built, pending an end-to-end run]
 
 Auth comes before the education layer so the rest of the UI is never built on the
 single-seeded-user assumption. The docs always said auth lands in M2; this is that.
@@ -97,12 +97,17 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
   tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
   lands in M2.
-- 2026-07-14  M2a complete: real auth. Supabase Auth (email + password) on the frontend, with
-  session refresh in `proxy.ts` and a login screen; the API verifies access tokens locally
-  against the project's ES256 JWKS and scopes every route to the signed-in user's account.
-  Accounts now open themselves, funded, on first sign-in. Note for anyone reading later:
-  Supabase RLS does NOT protect these tables (we go straight to Postgres, not through
-  PostgREST), so the API's account scoping is the only thing keeping users apart.
+- 2026-07-14  M2a built, NOT yet verified end to end. Supabase Auth (email + password) on the
+  frontend, with session refresh in `proxy.ts` and a login screen; the API verifies access
+  tokens locally against the project's ES256 JWKS and scopes every route to the signed-in
+  user's account. Accounts open themselves, funded, on first sign-in. Verified so far: the
+  full test suite (75 passing, including two users not seeing each other's money), a live
+  server rejecting every `/api` call without a valid token, and the real JWKS loading and
+  parsing. Still to do before this counts as done: put the Supabase publishable key in
+  `web/.env.local` and walk the sign-up -> dashboard -> buy flow in a browser.
+  Note for anyone reading later: Supabase RLS does NOT protect these tables (we go straight
+  to Postgres, not through PostgREST), so the API's account scoping is the only thing keeping
+  users apart.
 - 2026-07-12  M1 complete: the core trading loop works end to end. A seeded $100k demo account,
   ticker search and a stock page (Finnhub quote/profile, Twelve Data price chart), market
   buy/sell by dollars or shares with fractional fills, a portfolio dashboard (totals, gain/loss,
