@@ -1,13 +1,18 @@
-"""Seed the single demo account.
+"""Fund a signed-up user's paper-trading account.
 
-Until real auth lands in M2 the app has exactly one user and one funded account.
-This script is idempotent: run it as many times as you like and it creates the
-pair once, never resetting an existing balance.
+Accounts open themselves: the first time someone signs in, the auth dependency
+creates their user row and a funded account. So this script is a manual top-up for
+local development, aimed at an account that already exists.
 
-Run it with: ``uv run python -m seed``
+Sign up through the web app first, then run:
+
+    uv run python -m seed --email you@example.com
 """
 
 from __future__ import annotations
+
+import argparse
+import sys
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,36 +20,39 @@ from sqlalchemy.orm import Session
 from config import Settings, get_settings
 from db import SessionLocal
 from models import Account, User
+from services.sim.accounts import get_or_create_account
 
 
-def seed_demo_account(session: Session, settings: Settings) -> Account:
-    """Ensure the demo user and their funded account exist, and return the account."""
-    user = session.scalar(select(User).where(User.email == settings.seed_user_email))
+class SeedError(Exception):
+    """The account could not be seeded. The message explains what to do about it."""
+
+
+def seed_account(session: Session, email: str, settings: Settings) -> tuple[Account, bool]:
+    """Ensure the user with this email has a funded account, and say if we just opened it."""
+    user = session.scalar(select(User).where(User.email == email))
     if user is None:
-        user = User(email=settings.seed_user_email)
-        session.add(user)
-        session.flush()  # assigns user.id
-
-    account = session.scalar(select(Account).where(Account.user_id == user.id))
-    if account is None:
-        account = Account(
-            user_id=user.id,
-            cash_balance=settings.starting_balance,
-            starting_balance=settings.starting_balance,
+        raise SeedError(
+            f"No user with the email {email}. Sign up in the web app first, then run this again."
         )
-        session.add(account)
-        session.flush()  # assigns account.id
-
-    return account
+    return get_or_create_account(session, user, starting_balance=settings.starting_balance)
 
 
 def main() -> None:
-    """Seed the account against the real database and report what happened."""
+    """Seed the account named on the command line and report what happened."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--email", required=True, help="the email you signed up with")
+    args = parser.parse_args()
+
     settings = get_settings()
     with SessionLocal() as session:
-        account = seed_demo_account(session, settings)
+        try:
+            account, created = seed_account(session, args.email, settings)
+        except SeedError as exc:
+            sys.exit(str(exc))
         session.commit()
-        print(f"Demo account ready: id={account.id}, cash={account.cash_balance}")
+
+    opened = "opened" if created else "already open"
+    print(f"Account {opened}: id={account.id}, cash={account.cash_balance}")
 
 
 if __name__ == "__main__":

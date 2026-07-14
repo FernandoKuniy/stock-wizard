@@ -8,15 +8,16 @@ coverage is thorough: both order modes, averaging, the guard rails, and reset.
 from __future__ import annotations
 
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from models import Account, Holding, Transaction
-from seed import seed_demo_account
+from models import Account, Holding, Transaction, User
 from services.market.client import Quote
+from services.sim.accounts import get_or_create_account
 from services.sim.engine import (
     InsufficientFunds,
     InsufficientShares,
@@ -49,8 +50,12 @@ class FakeMarket:
 
 @pytest.fixture
 def account(db_session: Session) -> Account:
-    acct = seed_demo_account(db_session, get_settings())
+    user = User(auth_id=uuid4(), email="learner@example.com")
+    db_session.add(user)
     db_session.flush()
+    acct, _ = get_or_create_account(
+        db_session, user, starting_balance=get_settings().starting_balance
+    )
     return acct
 
 

@@ -22,15 +22,26 @@ class Settings(BaseSettings):
 
     finnhub_api_key: str
     database_url: str
+    # The Supabase project URL, e.g. https://abcdefgh.supabase.co. Not a secret: it
+    # only locates the project's public JWKS, which is how we verify access tokens.
+    supabase_url: str
     # Twelve Data serves the historical candles Finnhub's free tier no longer does.
     # Optional: the app still runs without it; only the price charts need it.
     twelve_data_api_key: str | None = None
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
-    # The single seeded account used until real auth lands in M2.
-    seed_user_email: str = "demo@stockwizard.local"
     # Fake starting cash for a new account. A round number feels less intimidating.
     starting_balance: Decimal = Decimal("100000")
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        """Where Supabase publishes the public keys that signed our users' tokens."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def supabase_issuer(self) -> str:
+        """The ``iss`` claim every token from this project must carry."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     @property
     def sqlalchemy_url(self) -> str:

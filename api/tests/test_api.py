@@ -3,25 +3,48 @@
 The DB is the in-memory SQLite session from conftest, and the market and candle
 clients are faked, so these exercise the real routes, sim, and analysis wiring
 without touching Finnhub, Twelve Data, or Postgres.
+
+Auth runs for real too: requests carry a bearer token and go through the actual
+``get_current_user`` -> ``get_current_account`` chain. Only the signature check is
+faked (see test_auth.py for the real one), which lets these tests sign in as two
+different people and prove their money stays separate.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from decimal import Decimal
+from typing import Any
+from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from config import get_settings
+from auth import get_token_verifier
 from db import get_db
-from deps import get_current_account
 from main import _round2, app
-from models import Account
-from seed import seed_demo_account
 from services.market.candles import CandlePoint, Candles, get_candle_client
 from services.market.client import CompanyProfile, Quote, SymbolMatch, get_market_client
+
+# Two signed-in people, each with their own Supabase user id.
+TOKEN_ALEX = "alex-token"
+TOKEN_SAM = "sam-token"
+CLAIMS = {
+    TOKEN_ALEX: {"sub": str(uuid4()), "email": "alex@example.com"},
+    TOKEN_SAM: {"sub": str(uuid4()), "email": "sam@example.com"},
+}
+
+
+class FakeVerifier:
+    """Maps a test token to claims, standing in for the real JWKS signature check."""
+
+    def verify(self, token: str) -> dict[str, Any]:
+        try:
+            return CLAIMS[token]
+        except KeyError:
+            raise HTTPException(status_code=401, detail="Sign in to continue.") from None
 
 
 class FakeMarket:
@@ -50,27 +73,84 @@ class FakeCandles:
 
 
 @pytest.fixture
-def account(db_session: Session) -> Account:
-    acct = seed_demo_account(db_session, get_settings())
-    db_session.commit()
-    return acct
+def overrides(db_session: Session) -> Iterator[None]:
+    """Point the app at the test session and the fake market, market data, and verifier."""
 
-
-@pytest.fixture
-def client(db_session: Session, account: Account) -> Iterator[TestClient]:
     def _db() -> Iterator[Session]:
         yield db_session
 
+    # Lambdas, not the classes themselves: FastAPI would read a class's __init__
+    # signature and start parsing its arguments as request parameters.
     app.dependency_overrides[get_db] = _db
-    app.dependency_overrides[get_current_account] = lambda: account
+    app.dependency_overrides[get_token_verifier] = lambda: FakeVerifier()
     app.dependency_overrides[get_market_client] = lambda: FakeMarket()
     app.dependency_overrides[get_candle_client] = lambda: FakeCandles()
-    yield TestClient(app)
+    yield
     app.dependency_overrides.clear()
 
 
-def test_health(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok"}
+@pytest.fixture
+def client(overrides: None) -> TestClient:
+    """Signed in as Alex."""
+    return TestClient(app, headers={"Authorization": f"Bearer {TOKEN_ALEX}"})
+
+
+@pytest.fixture
+def sams_client(overrides: None) -> TestClient:
+    """Signed in as Sam, a different user with their own account."""
+    return TestClient(app, headers={"Authorization": f"Bearer {TOKEN_SAM}"})
+
+
+@pytest.fixture
+def anon_client(overrides: None) -> TestClient:
+    """Not signed in at all."""
+    return TestClient(app)
+
+
+def test_health_needs_no_token(anon_client: TestClient) -> None:
+    assert anon_client.get("/health").json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", "/api/portfolio"),
+        ("get", "/api/transactions"),
+        ("post", "/api/account/reset"),
+        ("post", "/api/orders"),
+    ],
+)
+def test_account_routes_require_a_token(anon_client: TestClient, method: str, path: str) -> None:
+    assert getattr(anon_client, method)(path).status_code == 401
+
+
+def test_a_bad_token_is_rejected(overrides: None) -> None:
+    impostor = TestClient(app, headers={"Authorization": "Bearer made-up"})
+    assert impostor.get("/api/portfolio").status_code == 401
+
+
+def test_first_sign_in_opens_a_funded_account(client: TestClient) -> None:
+    portfolio = client.get("/api/portfolio").json()
+
+    assert portfolio["cash"] == 100000.0
+    assert portfolio["starting_balance"] == 100000.0
+    assert portfolio["holdings"] == []
+
+
+def test_one_users_trades_never_touch_anothers(client: TestClient, sams_client: TestClient) -> None:
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+
+    mine = client.get("/api/portfolio").json()
+    theirs = sams_client.get("/api/portfolio").json()
+
+    assert mine["holdings"][0]["symbol"] == "AAPL"
+    assert mine["cash"] == 98500.0
+    # Sam sees their own untouched account, not Alex's shares or Alex's spent cash.
+    assert theirs["holdings"] == []
+    assert theirs["cash"] == 100000.0
+    assert sams_client.get("/api/transactions").json() == []
 
 
 def test_search(client: TestClient) -> None:

@@ -16,6 +16,7 @@ from models import Base
 
 os.environ.setdefault("FINNHUB_API_KEY", "test-key")
 os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/stockwiz_test")
+os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
 
 
 @pytest.fixture
