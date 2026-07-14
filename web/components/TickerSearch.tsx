@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { searchSymbols, type SymbolMatch } from "@/lib/api";
+import { getAccessToken } from "@/lib/supabase/client";
 
 export function TickerSearch() {
   const router = useRouter();
@@ -28,7 +29,8 @@ export function TickerSearch() {
     }
     // Debounce so we only search once the user pauses, staying under the free tier.
     timer.current = setTimeout(() => {
-      searchSymbols(next)
+      getAccessToken()
+        .then((token) => searchSymbols(next, token))
         .then(setResults)
         .catch(() => setResults([]));
     }, 200);

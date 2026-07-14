@@ -6,6 +6,7 @@ import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
 import { getPortfolio, type Portfolio } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { getAccessToken } from "@/lib/supabase/server";
 
 // The portfolio is live data, so render on every request rather than at build.
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   let portfolio: Portfolio;
   try {
-    portfolio = await getPortfolio();
+    portfolio = await getPortfolio(await getAccessToken());
   } catch (e) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 
 import { TickerSearch } from "@/components/TickerSearch";
+import { getUser } from "@/lib/supabase/server";
+import { signOut } from "./login/actions";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,11 +23,15 @@ export const metadata: Metadata = {
     "Learn investing with fake money and real market prices. A simulation for education, not financial advice.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Signed out, the only page you can reach is the login screen, so the header is
+  // just the wordmark. No search box, nothing to sign out of.
+  const user = await getUser();
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
@@ -34,9 +40,21 @@ export default function RootLayout({
             <Link href="/" className="font-semibold tracking-tight whitespace-nowrap">
               Stock Wizard
             </Link>
-            <div className="flex-1">
-              <TickerSearch />
-            </div>
+            {user && (
+              <>
+                <div className="flex-1">
+                  <TickerSearch />
+                </div>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="text-sm whitespace-nowrap text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </header>
         {children}

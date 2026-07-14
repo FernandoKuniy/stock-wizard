@@ -4,16 +4,18 @@ import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
 import { getCandles, getPortfolio, getStock, type CandlePoint, type Stock } from "@/lib/api";
 import { formatCompactMoney, formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
+import { getAccessToken } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
   const upper = decodeURIComponent(symbol).toUpperCase();
+  const token = await getAccessToken();
 
   let stock: Stock;
   try {
-    stock = await getStock(upper);
+    stock = await getStock(upper, token);
   } catch (e) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
@@ -29,7 +31,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
 
   let candles: CandlePoint[] | null = null;
   try {
-    candles = (await getCandles(upper)).points;
+    candles = (await getCandles(upper, token)).points;
   } catch {
     candles = null; // chart unavailable (e.g. no Twelve Data key); the page still works
   }
@@ -37,7 +39,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   let cash = 0;
   let heldShares = 0;
   try {
-    const portfolio = await getPortfolio();
+    const portfolio = await getPortfolio(token);
     cash = portfolio.cash;
     heldShares = portfolio.holdings.find((h) => h.symbol === upper)?.quantity ?? 0;
   } catch {

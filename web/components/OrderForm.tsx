@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { placeOrder, type OrderResult } from "@/lib/api";
 import { formatMoney, formatShares } from "@/lib/format";
+import { getAccessToken } from "@/lib/supabase/client";
 
 type Side = "buy" | "sell";
 type Mode = "dollars" | "shares";
@@ -39,7 +40,10 @@ export function OrderForm({
     setError(null);
     setDone(null);
     try {
-      const result = await placeOrder({ symbol, side, mode, value: amount });
+      const result = await placeOrder(
+        { symbol, side, mode, value: amount },
+        await getAccessToken(),
+      );
       setDone(confirmation(side, result));
       setValue("");
       router.refresh();

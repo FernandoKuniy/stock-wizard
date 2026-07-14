@@ -2,13 +2,14 @@ import Link from "next/link";
 
 import { getTransactions, type Transaction } from "@/lib/api";
 import { formatDateTime, formatMoney, formatShares } from "@/lib/format";
+import { getAccessToken } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function TransactionsPage() {
   let transactions: Transaction[];
   try {
-    transactions = await getTransactions();
+    transactions = await getTransactions(await getAccessToken());
   } catch (e) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">

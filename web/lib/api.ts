@@ -1,7 +1,14 @@
 // Typed client for the Stock Wizard backend. Every network call goes through
 // here so error handling and the base URL live in one place.
+//
+// Every call takes the signed-in user's access token, which the backend verifies.
+// The token is passed in rather than looked up here, because where it comes from
+// depends on where the code runs: lib/supabase/server.ts on the server, and
+// lib/supabase/client.ts in the browser.
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export type Token = string | null;
 
 export type Holding = {
   symbol: string;
@@ -73,14 +80,20 @@ export type OrderInput = {
   value: number;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, token: Token, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     // Always hit the backend: balances and prices must be live, never cached.
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
+
   if (!res.ok) {
+    if (res.status === 401) throw new Error("Your session ran out. Sign in again.");
+
     let detail = `Something went wrong (${res.status}).`;
     try {
       const body = await res.json();
@@ -90,23 +103,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(detail);
   }
+
   return (await res.json()) as T;
 }
 
-export const getPortfolio = () => request<Portfolio>("/api/portfolio");
+export const getPortfolio = (token: Token) => request<Portfolio>("/api/portfolio", token);
 
-export const getTransactions = () => request<Transaction[]>("/api/transactions");
+export const getTransactions = (token: Token) => request<Transaction[]>("/api/transactions", token);
 
-export const resetAccount = () => request<Portfolio>("/api/account/reset", { method: "POST" });
+export const resetAccount = (token: Token) =>
+  request<Portfolio>("/api/account/reset", token, { method: "POST" });
 
-export const searchSymbols = (query: string) =>
-  request<SymbolMatch[]>(`/api/search?q=${encodeURIComponent(query)}`);
+export const searchSymbols = (query: string, token: Token) =>
+  request<SymbolMatch[]>(`/api/search?q=${encodeURIComponent(query)}`, token);
 
-export const getStock = (symbol: string) =>
-  request<Stock>(`/api/stock/${encodeURIComponent(symbol)}`);
+export const getStock = (symbol: string, token: Token) =>
+  request<Stock>(`/api/stock/${encodeURIComponent(symbol)}`, token);
 
-export const getCandles = (symbol: string) =>
-  request<Candles>(`/api/stock/${encodeURIComponent(symbol)}/candles`);
+export const getCandles = (symbol: string, token: Token) =>
+  request<Candles>(`/api/stock/${encodeURIComponent(symbol)}/candles`, token);
 
-export const placeOrder = (order: OrderInput) =>
-  request<OrderResult>("/api/orders", { method: "POST", body: JSON.stringify(order) });
+export const placeOrder = (order: OrderInput, token: Token) =>
+  request<OrderResult>("/api/orders", token, { method: "POST", body: JSON.stringify(order) });

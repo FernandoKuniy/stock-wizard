@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { resetAccount } from "@/lib/api";
+import { getAccessToken } from "@/lib/supabase/client";
 
 export function ResetButton() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export function ResetButton() {
     setBusy(true);
     setError(null);
     try {
-      await resetAccount();
+      await resetAccount(await getAccessToken());
       setConfirming(false);
       router.refresh();
     } catch (e) {
