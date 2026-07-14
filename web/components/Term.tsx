@@ -15,11 +15,14 @@ type TooltipCoords = {
  *
  * Works on a mouse (hover), a keyboard (focus), and a phone (tap), because a beginner
  * on a phone needs the definition just as much as anyone.
+ *
+ * The bubble is portalled to <body> and positioned in viewport coordinates, because the
+ * table it usually sits in clips its own overflow. Positioned inline, the definition would
+ * get cut off by the very element it is trying to explain.
  */
 export function Term({ name, children }: { name: GlossaryTerm; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<TooltipCoords | null>(null);
-  const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
 
@@ -34,32 +37,30 @@ export function Term({ name, children }: { name: GlossaryTerm; children?: React.
     });
   }, []);
 
+  // Measure whenever it opens, whichever way it was opened (hover, focus, or tap), and keep
+  // it pinned to the word if the page moves underneath it.
+  useEffect(() => {
+    if (!open) return;
+
+    const reposition = () => updateCoords();
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [open, updateCoords]);
+
   const show = useCallback(() => {
     updateCoords();
     setOpen(true);
   }, [updateCoords]);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    updateCoords();
-
-    const onScrollOrResize = () => updateCoords();
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
-
-    return () => {
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
-    };
-  }, [open, updateCoords]);
-
+  // No "mounted" guard needed: `open` only ever flips from a user event, which cannot happen
+  // during server rendering, so document.body is always there by the time we portal into it.
   const tooltip =
-    open && mounted && coords
+    open && coords
       ? createPortal(
           <span
             id={id}
@@ -80,7 +81,9 @@ export function Term({ name, children }: { name: GlossaryTerm; children?: React.
         type="button"
         aria-expanded={open}
         aria-describedby={open ? id : undefined}
-        onClick={() => setOpen((was) => !was)}
+        // Measure on the way open, not just on hover: a tap never fires onMouseEnter, so
+        // without this the definition would never show up on a phone.
+        onClick={() => (open ? setOpen(false) : show())}
         onMouseEnter={show}
         onMouseLeave={() => setOpen(false)}
         onFocus={show}
