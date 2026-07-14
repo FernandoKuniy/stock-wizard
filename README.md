@@ -7,12 +7,14 @@ education first. It is a simulation for learning, not financial advice.
 
 ## Status
 
-The core trading loop works end to end, and it's multi-user: sign up, get a funded $100k
-account, search a ticker, land on a stock page with a live price chart, buy and sell by
-dollar amount or share quantity (fractional shares included), watch a portfolio dashboard
-with an allocation chart, read your transaction history, and reset the whole thing when you
-want a do-over. The education layer (a benchmark line against the S&P 500, jargon tooltips)
-is next, then the AI tutor. See [docs/roadmap.md](docs/roadmap.md) for the plan and progress.
+The trading loop and the education layer both work end to end, and it's multi-user. Sign up,
+get a funded $100k account, search a ticker, land on a stock page with a live price chart, and
+buy or sell by dollar amount or share quantity (fractional shares included). The dashboard
+opens with the question that matters: your money against the S&P 500, so you can see whether
+picking stocks actually beat just buying the whole market. Jargon is one tap from a plain
+definition, short explainers appear the first time you meet a new idea, and everything is
+framed in money rather than naked percentages. The AI tutor is next. See
+[docs/roadmap.md](docs/roadmap.md) for the plan and progress.
 
 ## Architecture
 
@@ -87,11 +89,19 @@ cd web && pnpm install && pnpm dev
 
 Runs on http://localhost:3000. Create an account on the login screen and you'll land on your
 dashboard with $100,000 of fake money. Accounts fund themselves on first sign-in, so there is
-nothing to seed. To top one up by hand later:
+nothing to seed.
+
+A brand new account has a portfolio chart one day wide, which teaches nobody anything. To give
+yours a real curve, backdate it six months and buy five well-known companies at the actual
+closing price of the day it says it bought them:
 
 ```bash
-cd api && uv run python -m seed --email you@example.com
+cd api && uv run python -m seed --email you@example.com --history
 ```
+
+The money is still fake and the prices are still real, which is the whole premise. Drop
+`--history` if you only want to make sure the account is funded. Hit **Reset account** in the
+app to wipe it and start over.
 
 ## Development
 

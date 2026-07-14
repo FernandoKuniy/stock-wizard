@@ -196,7 +196,7 @@ class MarketClient:
 
 
 def _compose_blurb(name: str, industry: str, exchange: str) -> str:
-    """Build a plain one-liner from provider fields (no LLM: M1 has no AI)."""
+    """Build a plain one-liner from the provider's own fields, in code, not with an LLM."""
     if industry:
         return f"{name} is a {industry} company."
     if exchange:

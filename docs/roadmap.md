@@ -99,14 +99,19 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
   tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
   lands in M2.
-- 2026-07-14  M2b built: the education layer. The dashboard now leads with the portfolio
-  against the S&P 500, rebuilt deterministically from the transactions and real closing prices
-  (no snapshot table, no cron). `seed --history` backdates a demo account six months and buys
-  five companies at real historical closes, so the chart teaches from the first screen. Plus
-  jargon tooltips, first-time explainers (localStorage, no schema change), and a money-framing
-  pass. Verified against live data: 128 trading days, both lines starting at exactly $100,000,
-  the demo portfolio up 6.43% against the index's 9.02%. Also fixed a dashboard bug where a
-  failed quote dropped a holding from the totals and read as a large fake loss.
+- 2026-07-14  M2b complete: the education layer, verified end to end in the browser. The
+  dashboard now leads with the portfolio against the S&P 500, rebuilt deterministically from
+  the transactions and real closing prices (no snapshot table, no cron). `seed --history`
+  backdates a demo account six months and buys five companies at real historical closes, so
+  the chart teaches from the first screen. Plus jargon tooltips, first-time explainers
+  (localStorage, no schema change), and a money-framing pass. Checked against live data: 128
+  trading days, both lines starting at exactly $100,000, the demo portfolio up 6.43% against
+  the index's 9.02%. Also fixed a dashboard bug where a failed quote dropped a holding from
+  the totals and read as a large fake loss.
+
+  Watch out in M3: drawing the history costs one Twelve Data call per symbol ever held, plus
+  one for the index, against a free tier of 8 a minute. A wider portfolio will trip it. See
+  the "Known ceiling" note in architecture.md.
 - 2026-07-14  M2a complete: real auth, verified end to end in the browser (sign up -> funded
   dashboard -> buy). Supabase Auth (email + password) on the frontend, with session refresh in
   `proxy.ts` and a login screen; the API verifies access tokens locally against the project's
