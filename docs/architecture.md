@@ -97,8 +97,17 @@ All external data calls and all caching live here. Nothing else touches a provid
   minute is fine for an educational app, and the free tier is delayed anyway).
 - Candles: historical daily bars for charts, from Twelve Data. Finnhub's free tier no longer
   serves `/stock/candle` (it 403s), so a second provider sits behind the market client for
-  candles; it uses `TWELVE_DATA_API_KEY` (optional, only charts need it). Cache longer (past
-  days do not change intraday).
+  candles; it uses `TWELVE_DATA_API_KEY` (optional, only charts need it). We always fetch the
+  long window (about two years) and slice it, because a call costs the same whether it returns
+  90 rows or 500. One fetch per symbol then serves both the stock page's price chart and the
+  portfolio history. Cached for 6 hours, since daily bars only change once a day after the
+  close.
+
+  Known ceiling: drawing the portfolio history needs one call per symbol ever held, plus one
+  for the index. Twelve Data's free tier allows 8 calls a minute, so an account holding more
+  than about seven different symbols can hit the rate limit on a cold cache. It degrades
+  cleanly (a clear "couldn't load your history" rather than a wrong chart), but it is a real
+  limit to be aware of before anyone widens the demo portfolio.
 - Company profile and symbol search: from Finnhub. The profile drives a plain-language,
   code-composed "what is this company" blurb (no LLM). Cache profiles for a long time.
 - News: recent articles per symbol (later). Cache for minutes.
@@ -137,22 +146,48 @@ framework code so it is easy to unit test.
 This is the source of truth for every figure the UI or the AI shows. All deterministic
 Python. No LLM anywhere near it.
 
-The M1 subset is built and unit-tested (portfolio value, per-position and total profit/loss,
-position weights), so the dashboard's numbers come from code. The rest lands in M3 with the
-tutor.
-
-Operators:
+Built and unit-tested so far, in `portfolio.py` and `history.py`:
 
 - Total portfolio value = cash + sum(quantity * current price).
 - Total and per-position profit/loss, absolute and percent.
 - Position weights (each holding as a percent of the portfolio).
+- Portfolio value over time, and the benchmark comparison vs SPY (see below).
+
+Still to build, with the tutor in M3:
+
 - Concentration and diversification signals (e.g. top holding weight, number of positions,
   sector spread using Finnhub sector data).
 - Simple volatility from historical candles.
-- Benchmark comparison vs SPY over the same period.
 
 Every function takes plain data in and returns plain numbers out, with clear names so the
 tutor can reference them by name.
+
+### Portfolio history and the benchmark (`history.py`)
+
+We do NOT store daily snapshots of what an account was worth. The series is rebuilt on demand
+from the transactions plus the real closing price of every symbol on every day. Replaying
+those forward gives an exact value per day, it works from an account's first day rather than
+only from the day we started recording, it survives a reset, and it needs no history table and
+no cron job to keep one fed.
+
+The benchmark takes the same starting balance, puts all of it into SPY on the day the account
+opened, and holds. Both lines therefore start at exactly the starting balance, which is what
+makes the comparison honest. The index's own trading days are the date spine, since it trades
+whenever the US market is open; a symbol with no bar on a given day is carried at its last
+close.
+
+The two failure modes get deliberately opposite treatment:
+
+- **The index is unavailable**: still draw the user's own line. It is correct on its own; we
+  just cannot compare.
+- **A held symbol's history is unavailable**: refuse to draw anything (502). A chart that
+  quietly omits a position understates someone's money, and a wrong chart about your money is
+  worse than no chart.
+
+The same principle applies on the dashboard: a holding whose live quote fails is carried in
+the totals at what it cost and flagged in `unpriced_symbols`, rather than dropped. Dropping it
+would shrink the portfolio by the whole position, so one flaky Finnhub call would read as a
+large loss the user never took.
 
 ## AI tutor layer (`services/tutor/`) — the "words"
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { Holding } from "@/lib/api";
 import { formatMoney, formatPercent, formatShares, formatSignedMoney } from "@/lib/format";
+import { Term } from "./Term";
 
 export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
   return (
@@ -11,10 +12,17 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
           <thead>
             <tr className="border-b border-zinc-100 text-left text-zinc-500 dark:border-zinc-800">
               <th className="px-4 py-3 font-medium">Stock</th>
-              <th className="px-4 py-3 text-right font-medium">Shares</th>
+              <th className="px-4 py-3 text-right font-medium">
+                <Term name="fractional shares">Shares</Term>
+              </th>
               <th className="px-4 py-3 text-right font-medium">Price</th>
-              <th className="px-4 py-3 text-right font-medium">Value</th>
-              <th className="px-4 py-3 text-right font-medium">Gain/loss</th>
+              <th className="px-4 py-3 text-right font-medium">
+                <Term name="cost basis">What you paid</Term>
+              </th>
+              <th className="px-4 py-3 text-right font-medium">Worth now</th>
+              <th className="px-4 py-3 text-right font-medium">
+                <Term name="gain/loss">Gain/loss</Term>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -33,6 +41,9 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {holding.price === null ? "—" : formatMoney(holding.price)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-zinc-500">
+                  {formatMoney(holding.cost_basis)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {holding.market_value === null ? "—" : formatMoney(holding.market_value)}

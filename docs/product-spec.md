@@ -21,9 +21,9 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
    one-line plain-English "what is this company" blurb.
 3. Buy and sell. Market orders only to start, filled at the latest quote. Sized by dollar
    amount or share quantity, with fractional shares (the beginner-friendly default).
-4. Portfolio dashboard: holdings, total value, cash left, total gain/loss, one clean chart
-   (an allocation donut for now; the value-over-time line lands with the benchmark in M2).
-   This is the screen that answers "how am I doing?" and it should be the default landing view.
+4. Portfolio dashboard: holdings, total value, cash left, total gain/loss, an allocation
+   donut, and the performance chart against the S&P 500. This is the screen that answers
+   "how am I doing?" and it is the default landing view.
 5. Transaction history.
 6. Reset button. Huge for beginners. Let them wipe the slate and start over with no fear.
 
@@ -33,8 +33,6 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
   market vs limit inline.
 - Watchlists.
 - Per-stock news feed (Finnhub provides this).
-- Benchmark line: "your portfolio vs if you had just bought the S&P 500." This single feature
-  teaches the most important lesson in investing. High priority once the basics work.
 - Historical "time machine" mode: start in a past year, fast-forward, see how you would have
   done. Teaches compounding and volatility in a way that actually lands.
 - Achievements and streaks to bring people back. Light gamification, not slot-machine stuff.

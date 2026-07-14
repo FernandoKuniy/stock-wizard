@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
+import { Term } from "@/components/Term";
 import { getCandles, getPortfolio, getStock, type CandlePoint, type Stock } from "@/lib/api";
 import { formatCompactMoney, formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
@@ -83,7 +84,10 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
                 {profile.industry && <Stat label="Industry" value={profile.industry} />}
                 {profile.exchange && <Stat label="Exchange" value={profile.exchange} />}
                 {profile.market_cap > 0 && (
-                  <Stat label="Market cap" value={formatCompactMoney(profile.market_cap)} />
+                  <Stat
+                    label={<Term name="market cap">Market cap</Term>}
+                    value={formatCompactMoney(profile.market_cap)}
+                  />
                 )}
               </div>
             </div>
@@ -107,7 +111,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: React.ReactNode; value: string }) {
   return (
     <div>
       <div className="text-zinc-500">{label}</div>

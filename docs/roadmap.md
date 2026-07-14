@@ -48,7 +48,7 @@ and get an LLM API key ready for M3.
 
 Goal: the core loop feels real and good before adding anything else.
 
-## M2a. Accounts and auth  [~ built, pending an end-to-end run]
+## M2a. Accounts and auth
 
 Auth comes before the education layer so the rest of the UI is never built on the
 single-seeded-user assumption. The docs always said auth lands in M2; this is that.
@@ -63,13 +63,15 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 
 ## M2b. Education layer
 
-- [ ] Backdated demo history, so the benchmark line has a real curve to teach with.
-- [ ] Benchmark line: portfolio vs S&P 500 over the same period. High priority.
-- [ ] Jargon tooltips (P/E, market cap, dividend yield, volume, etc.).
-- [ ] First-time contextual explainers for new concepts.
-- [ ] Plain-language money framing across the UI ("you made $240", not just "up 2.4%").
-- [ ] Fix: a failed quote silently drops a holding from the portfolio totals, so one flaky
-      Finnhub call reads as a big fake loss.
+- [x] Backdated demo history (`seed --history`), so the benchmark line has a real curve to
+      teach with, bought at real historical closing prices.
+- [x] Benchmark line: portfolio vs S&P 500 over the same period, rebuilt from the
+      transactions rather than stored as snapshots.
+- [x] Jargon tooltips (market cap, cost basis, market order, S&P 500, and the rest).
+- [x] First-time contextual explainers for new concepts (welcome, the benchmark, first order).
+- [x] Plain-language money framing across the UI ("you made $240", not just "up 2.4%").
+- [x] Fix: a failed quote silently dropped a holding from the portfolio totals, so one flaky
+      Finnhub call read as a big fake loss. Now carried at cost and flagged as stale.
 
 ## M3. AI tutor
 
@@ -97,17 +99,21 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,
   tsc) is green locally. Single seeded user with no real login is the M0-M1 plan; Supabase Auth
   lands in M2.
-- 2026-07-14  M2a built, NOT yet verified end to end. Supabase Auth (email + password) on the
-  frontend, with session refresh in `proxy.ts` and a login screen; the API verifies access
-  tokens locally against the project's ES256 JWKS and scopes every route to the signed-in
-  user's account. Accounts open themselves, funded, on first sign-in. Verified so far: the
-  full test suite (75 passing, including two users not seeing each other's money), a live
-  server rejecting every `/api` call without a valid token, and the real JWKS loading and
-  parsing. Still to do before this counts as done: put the Supabase publishable key in
-  `web/.env.local` and walk the sign-up -> dashboard -> buy flow in a browser.
-  Note for anyone reading later: Supabase RLS does NOT protect these tables (we go straight
-  to Postgres, not through PostgREST), so the API's account scoping is the only thing keeping
-  users apart.
+- 2026-07-14  M2b built: the education layer. The dashboard now leads with the portfolio
+  against the S&P 500, rebuilt deterministically from the transactions and real closing prices
+  (no snapshot table, no cron). `seed --history` backdates a demo account six months and buys
+  five companies at real historical closes, so the chart teaches from the first screen. Plus
+  jargon tooltips, first-time explainers (localStorage, no schema change), and a money-framing
+  pass. Verified against live data: 128 trading days, both lines starting at exactly $100,000,
+  the demo portfolio up 6.43% against the index's 9.02%. Also fixed a dashboard bug where a
+  failed quote dropped a holding from the totals and read as a large fake loss.
+- 2026-07-14  M2a complete: real auth, verified end to end in the browser (sign up -> funded
+  dashboard -> buy). Supabase Auth (email + password) on the frontend, with session refresh in
+  `proxy.ts` and a login screen; the API verifies access tokens locally against the project's
+  ES256 JWKS and scopes every route to the signed-in user's account. Accounts open themselves,
+  funded, on first sign-in, so there is nothing to seed. Note for anyone reading later:
+  Supabase RLS does NOT protect these tables (we go straight to Postgres, not through
+  PostgREST), so the API's account scoping is the only thing keeping users apart.
 - 2026-07-12  M1 complete: the core trading loop works end to end. A seeded $100k demo account,
   ticker search and a stock page (Finnhub quote/profile, Twelve Data price chart), market
   buy/sell by dollars or shares with fractional fills, a portfolio dashboard (totals, gain/loss,

@@ -6,6 +6,8 @@ import { useState } from "react";
 import { placeOrder, type OrderResult } from "@/lib/api";
 import { formatMoney, formatShares } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/client";
+import { FirstTimeCallout } from "./FirstTimeCallout";
+import { Term } from "./Term";
 
 type Side = "buy" | "sell";
 type Mode = "dollars" | "shares";
@@ -109,10 +111,7 @@ export function OrderForm({
 
           {valid && (
             <p className="mt-2 text-xs text-zinc-500">
-              {mode === "dollars"
-                ? `About ${formatShares(estShares)} shares`
-                : `About ${formatMoney(estCost)}`}{" "}
-              at the current price.
+              {plainEnglish({ side, mode, estShares, estCost, cash, symbol })}
             </p>
           )}
 
@@ -127,13 +126,23 @@ export function OrderForm({
             {busy ? "Placing…" : side === "buy" ? `Buy ${symbol}` : `Sell ${symbol}`}
           </button>
 
-          <p className="mt-2 text-center text-xs text-zinc-400">Fills at the current price.</p>
+          <p className="mt-2 text-center text-xs text-zinc-400">
+            This is a <Term name="market order">market order</Term>.
+          </p>
 
           {side === "buy" ? (
             <p className="mt-3 text-xs text-zinc-500">You have {formatMoney(cash)} to invest.</p>
           ) : (
             <p className="mt-3 text-xs text-zinc-500">You own {formatShares(heldShares)} shares.</p>
           )}
+
+          <div className="mt-4">
+            <FirstTimeCallout id="first-order" title="What happens when you hit buy">
+              It fills straight away at whatever the price is right now. No haggling, no waiting.
+              You can put in a dollar amount instead of a number of shares, and you&apos;ll get a
+              fraction of a share if that&apos;s what the money buys.
+            </FirstTimeCallout>
+          </div>
         </>
       )}
 
@@ -141,6 +150,32 @@ export function OrderForm({
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
     </div>
   );
+}
+
+/** Say what the order actually does, in money, not in jargon. */
+function plainEnglish(args: {
+  side: Side;
+  mode: Mode;
+  estShares: number;
+  estCost: number;
+  cash: number;
+  symbol: string;
+}): string {
+  const { side, mode, estShares, estCost, cash, symbol } = args;
+
+  if (side === "buy") {
+    const left = cash - estCost;
+    const buys =
+      mode === "dollars"
+        ? `${formatMoney(estCost)} buys about ${formatShares(estShares)} shares of ${symbol}`
+        : `About ${formatShares(estShares)} shares costs you around ${formatMoney(estCost)}`;
+    if (left < 0) return `${buys}.`;
+    return `${buys}, leaving you ${formatMoney(left)} in cash.`;
+  }
+
+  return `You'd get about ${formatMoney(estCost)} back, bringing your cash to ${formatMoney(
+    cash + estCost,
+  )}.`;
 }
 
 function confirmation(side: Side, result: OrderResult): string {

@@ -51,6 +51,9 @@ Fill these in as the project takes shape. Keep them exact so Claude Code runs th
 - Backend dev: `cd api && uv run uvicorn main:app --reload`
 - Top up an account: `cd api && uv run python -m seed --email you@example.com` (accounts open
   themselves, funded, on first sign-in, so this is only for topping one up by hand)
+- Give it demo history: `cd api && uv run python -m seed --email you@example.com --history`
+  (backdates six months and buys five companies at real historical closes, so the charts have
+  a curve to teach with)
 - Backend tests: `cd api && uv run pytest`
 - Lint/format (api): `uv run ruff check .` and `uv run ruff format .`
 - Lint/format (web): `pnpm lint` and `pnpm exec prettier --write .`

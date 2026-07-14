@@ -31,6 +31,27 @@ export type Portfolio = {
   total_gain_loss_percent: number;
   cash_weight: number;
   holdings: Holding[];
+  // Holdings we couldn't get a live price for. They're counted in the totals at what they
+  // cost, so a flaky quote can't read as a loss the user never took.
+  unpriced_symbols: string[];
+};
+
+export type HistoryPoint = { date: string; portfolio: number; benchmark: number | null };
+
+export type BenchmarkComparison = {
+  portfolio_value: number;
+  benchmark_value: number;
+  // Positive means you're ahead of the index, in dollars.
+  difference: number;
+  portfolio_percent: number;
+  benchmark_percent: number;
+};
+
+export type PortfolioHistory = {
+  starting_balance: number;
+  benchmark_symbol: string | null;
+  points: HistoryPoint[];
+  comparison: BenchmarkComparison | null;
 };
 
 export type SymbolMatch = { symbol: string; description: string; type: string };
@@ -108,6 +129,9 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
 }
 
 export const getPortfolio = (token: Token) => request<Portfolio>("/api/portfolio", token);
+
+export const getPortfolioHistory = (token: Token) =>
+  request<PortfolioHistory>("/api/portfolio/history", token);
 
 export const getTransactions = (token: Token) => request<Transaction[]>("/api/transactions", token);
 

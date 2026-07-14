@@ -1,10 +1,17 @@
 import Link from "next/link";
 
 import { AllocationChart } from "@/components/AllocationChart";
+import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
+import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
-import { getPortfolio, type Portfolio } from "@/lib/api";
+import {
+  getPortfolio,
+  getPortfolioHistory,
+  type Portfolio,
+  type PortfolioHistory,
+} from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
 
@@ -12,9 +19,11 @@ import { getAccessToken } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const token = await getAccessToken();
+
   let portfolio: Portfolio;
   try {
-    portfolio = await getPortfolio(await getAccessToken());
+    portfolio = await getPortfolio(token);
   } catch (e) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
@@ -23,6 +32,15 @@ export default async function Home() {
         </p>
       </main>
     );
+  }
+
+  // The chart is the nice-to-have here. If the market data is having a bad day, the rest of
+  // the dashboard still has to work, so a failure here is not a failure of the page.
+  let history: PortfolioHistory | null = null;
+  try {
+    history = await getPortfolioHistory(token);
+  } catch {
+    history = null;
   }
 
   const hasHoldings = portfolio.holdings.length > 0;
@@ -35,7 +53,29 @@ export default async function Home() {
           <ResetButton />
         </div>
 
+        <FirstTimeCallout id="welcome" title="None of this is real money">
+          You&apos;ve got {formatMoney(portfolio.starting_balance)} of fake cash and real market
+          prices. Buy things, get them wrong, hit reset. That&apos;s the whole point.
+        </FirstTimeCallout>
+
         <PortfolioSummary portfolio={portfolio} />
+
+        {portfolio.unpriced_symbols.length > 0 && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+            We couldn&apos;t get a live price for {portfolio.unpriced_symbols.join(", ")} just now,
+            so it&apos;s counted at what you paid. Your totals are a little stale, not wrong.
+          </p>
+        )}
+
+        {history && <PerformanceChart history={history} />}
+
+        {history?.comparison && (
+          <FirstTimeCallout id="benchmark" title="Why the second line matters">
+            The grey line is what would have happened if you&apos;d skipped picking stocks and put
+            everything into the S&P 500, a basket of 500 big US companies. Most people who pick
+            their own stocks do worse than that line. Beating it is the actual game.
+          </FirstTimeCallout>
+        )}
 
         {hasHoldings ? (
           <>
