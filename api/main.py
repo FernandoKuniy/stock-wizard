@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from auth import get_current_user
 from config import get_settings
 from db import get_db
 from deps import get_current_account
@@ -68,6 +69,11 @@ CandleDep = Annotated[CandleClient, Depends(get_candle_client)]
 SessionDep = Annotated[Session, Depends(get_db)]
 AccountDep = Annotated[Account, Depends(get_current_account)]
 
+# The market-data routes don't touch anyone's account, but they do spend our Finnhub
+# and Twelve Data quota, so they're for signed-in users only. Everything under /api
+# needs a token; /health is the only open door.
+signed_in = [Depends(get_current_user)]
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -75,7 +81,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/quote/{symbol}")
+@app.get("/api/quote/{symbol}", dependencies=signed_in)
 def read_quote(symbol: str, market: MarketDep) -> QuoteOut:
     """Return a live quote for ``symbol`` (e.g. AAPL)."""
     try:
@@ -84,7 +90,7 @@ def read_quote(symbol: str, market: MarketDep) -> QuoteOut:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@app.get("/api/search")
+@app.get("/api/search", dependencies=signed_in)
 def search_symbols(q: str, market: MarketDep) -> list[SymbolMatchOut]:
     """Return ticker matches for a free-text query."""
     try:
@@ -96,7 +102,7 @@ def search_symbols(q: str, market: MarketDep) -> list[SymbolMatchOut]:
     ]
 
 
-@app.get("/api/stock/{symbol}")
+@app.get("/api/stock/{symbol}", dependencies=signed_in)
 def read_stock(symbol: str, market: MarketDep) -> StockOut:
     """Return the current quote and best-effort company profile for a symbol."""
     try:
@@ -110,7 +116,7 @@ def read_stock(symbol: str, market: MarketDep) -> StockOut:
     return StockOut(quote=_quote_out(quote), profile=profile)
 
 
-@app.get("/api/stock/{symbol}/candles")
+@app.get("/api/stock/{symbol}/candles", dependencies=signed_in)
 def read_candles(symbol: str, candles: CandleDep) -> CandlesOut:
     """Return recent daily candles for the price chart."""
     try:
