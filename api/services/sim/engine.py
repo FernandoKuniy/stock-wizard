@@ -13,6 +13,7 @@ stay as ``MarketError`` and bubble up untouched.
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from typing import Protocol
 
@@ -67,19 +68,30 @@ def buy(
         shares = quantity.quantize(_SHARES, rounding=ROUND_DOWN)
     else:
         shares = (size / price).quantize(_SHARES, rounding=ROUND_DOWN)
-    if shares <= _ZERO:
-        raise InvalidOrder("That's too small to buy even a fraction of a share.")
 
-    cost = (shares * price).quantize(_CASH, rounding=ROUND_HALF_UP)
-    if cost > account.cash_balance:
-        raise InsufficientFunds(
-            f"You need ${_money(cost)} but only have ${_money(account.cash_balance)}."
-        )
+    return _fill_buy(session, account, symbol, shares, price)
 
-    account.cash_balance -= cost
-    _add_shares(session, account, symbol, shares, cost)
 
-    return _record(session, account, symbol, "buy", shares, price)
+def backfill_buy(
+    session: Session,
+    account: Account,
+    symbol: str,
+    *,
+    shares: Decimal,
+    price: Decimal,
+    at: datetime,
+) -> Transaction:
+    """Record a buy that happened in the past, filled at that day's closing price.
+
+    This exists for the seed script, which gives a demo account real history so the
+    benchmark chart has a curve worth teaching from. It is not a back door into the
+    trading API: no route calls it, and a live order always goes through ``buy``, which
+    fills at the latest quote and cannot be handed a price. The cash, average-cost, and
+    transaction bookkeeping is the same code either way.
+    """
+    return _fill_buy(
+        session, account, symbol.upper(), shares.quantize(_SHARES, rounding=ROUND_DOWN), price, at
+    )
 
 
 def sell(
@@ -138,6 +150,30 @@ def reset(session: Session, account: Account) -> None:
     session.flush()
 
 
+def _fill_buy(
+    session: Session,
+    account: Account,
+    symbol: str,
+    shares: Decimal,
+    price: Decimal,
+    at: datetime | None = None,
+) -> Transaction:
+    """Settle a buy of ``shares`` at ``price``: check the cash, debit it, book the shares."""
+    if shares <= _ZERO:
+        raise InvalidOrder("That's too small to buy even a fraction of a share.")
+
+    cost = (shares * price).quantize(_CASH, rounding=ROUND_HALF_UP)
+    if cost > account.cash_balance:
+        raise InsufficientFunds(
+            f"You need ${_money(cost)} but only have ${_money(account.cash_balance)}."
+        )
+
+    account.cash_balance -= cost
+    _add_shares(session, account, symbol, shares, cost)
+
+    return _record(session, account, symbol, "buy", shares, price, at=at)
+
+
 def _require_one_size(quantity: Decimal | None, amount: Decimal | None) -> Decimal:
     """Validate that exactly one positive size was given, and return it."""
     if (quantity is None) == (amount is None):
@@ -178,9 +214,15 @@ def _record(
     side: str,
     shares: Decimal,
     price: Decimal,
+    at: datetime | None = None,
 ) -> Transaction:
-    """Write the transaction row and flush so it gets an id and timestamp."""
+    """Write the transaction row and flush so it gets an id and timestamp.
+
+    ``at`` overrides the database's "now" default, which only the seed script needs.
+    """
     txn = Transaction(account_id=account.id, symbol=symbol, side=side, quantity=shares, price=price)
+    if at is not None:
+        txn.timestamp = at
     session.add(txn)
     session.flush()
     return txn

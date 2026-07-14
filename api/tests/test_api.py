@@ -13,6 +13,7 @@ different people and prove their money stays separate.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -20,13 +21,21 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from auth import get_token_verifier
 from db import get_db
 from main import _round2, app
+from models import Account
 from services.market.candles import CandlePoint, Candles, get_candle_client
-from services.market.client import CompanyProfile, Quote, SymbolMatch, get_market_client
+from services.market.client import (
+    CompanyProfile,
+    MarketError,
+    Quote,
+    SymbolMatch,
+    get_market_client,
+)
 
 # Two signed-in people, each with their own Supabase user id.
 TOKEN_ALEX = "alex-token"
@@ -52,10 +61,15 @@ class FakeMarket:
 
     def __init__(self, prices: dict[str, float] | None = None) -> None:
         self._prices = prices or {"AAPL": 150.0, "MSFT": 300.0}
+        # Symbols whose quote should blow up, so tests can act out a flaky provider.
+        self.failing: set[str] = set()
 
     def get_quote(self, symbol: str) -> Quote:
-        price = self._prices[symbol.upper()]
-        return Quote(symbol.upper(), price, 0.0, 0.0, price, price, price, price)
+        symbol = symbol.upper()
+        if symbol in self.failing:
+            raise MarketError(f"No quote available for {symbol}.")
+        price = self._prices[symbol]
+        return Quote(symbol, price, 0.0, 0.0, price, price, price, price)
 
     def search(self, query: str) -> list[SymbolMatch]:
         return [SymbolMatch("AAPL", "APPLE INC", "Common Stock")]
@@ -66,14 +80,47 @@ class FakeMarket:
         )
 
 
+# Three trading days ending today, so the history spine has something to walk.
+CHART_DAYS = [date.today() - timedelta(days=2), date.today() - timedelta(days=1), date.today()]
+# The index climbs 10% over the window. Each symbol's last close matches its live quote,
+# so today's point on the history chart lines up with today's portfolio total.
+CHART_CLOSES = {
+    "SPY": [500.0, 520.0, 550.0],
+    "AAPL": [100.0, 120.0, 150.0],
+    "MSFT": [280.0, 290.0, 300.0],
+}
+
+
 class FakeCandles:
+    """Daily closes for the last three days, per symbol."""
+
+    def __init__(self) -> None:
+        self.failing: set[str] = set()
+
     def get_candles(self, symbol: str, *, outputsize: int = 90) -> Candles:
-        points = [CandlePoint("2026-07-09", 1.0), CandlePoint("2026-07-10", 2.0)]
-        return Candles(symbol.upper(), points)
+        symbol = symbol.upper()
+        if symbol in self.failing:
+            raise MarketError(f"No chart data available for {symbol}.")
+        closes = CHART_CLOSES[symbol]
+        points = [
+            CandlePoint(day.isoformat(), close)
+            for day, close in zip(CHART_DAYS, closes, strict=True)
+        ]
+        return Candles(symbol, points[-outputsize:])
 
 
 @pytest.fixture
-def overrides(db_session: Session) -> Iterator[None]:
+def market() -> FakeMarket:
+    return FakeMarket()
+
+
+@pytest.fixture
+def candles() -> FakeCandles:
+    return FakeCandles()
+
+
+@pytest.fixture
+def overrides(db_session: Session, market: FakeMarket, candles: FakeCandles) -> Iterator[None]:
     """Point the app at the test session and the fake market, market data, and verifier."""
 
     def _db() -> Iterator[Session]:
@@ -83,8 +130,8 @@ def overrides(db_session: Session) -> Iterator[None]:
     # signature and start parsing its arguments as request parameters.
     app.dependency_overrides[get_db] = _db
     app.dependency_overrides[get_token_verifier] = lambda: FakeVerifier()
-    app.dependency_overrides[get_market_client] = lambda: FakeMarket()
-    app.dependency_overrides[get_candle_client] = lambda: FakeCandles()
+    app.dependency_overrides[get_market_client] = lambda: market
+    app.dependency_overrides[get_candle_client] = lambda: candles
     yield
     app.dependency_overrides.clear()
 
@@ -105,6 +152,14 @@ def sams_client(overrides: None) -> TestClient:
 def anon_client(overrides: None) -> TestClient:
     """Not signed in at all."""
     return TestClient(app)
+
+
+def open_account_on(db_session: Session, client: TestClient, opened_on: date) -> None:
+    """Sign in (which opens the account), then backdate when it opened."""
+    assert client.get("/api/portfolio").status_code == 200
+    account = db_session.scalars(select(Account)).one()
+    account.created_at = datetime.combine(opened_on, time.min)
+    db_session.commit()
 
 
 def test_health_needs_no_token(anon_client: TestClient) -> None:
@@ -166,7 +221,8 @@ def test_stock_has_quote_and_profile(client: TestClient) -> None:
 
 def test_candles(client: TestClient) -> None:
     points = client.get("/api/stock/AAPL/candles").json()["points"]
-    assert [p["date"] for p in points] == ["2026-07-09", "2026-07-10"]
+    assert [p["date"] for p in points] == [day.isoformat() for day in CHART_DAYS]
+    assert [p["close"] for p in points] == CHART_CLOSES["AAPL"]
 
 
 def test_buy_updates_cash_and_portfolio(client: TestClient) -> None:
@@ -235,6 +291,100 @@ def test_reset_clears_everything(client: TestClient) -> None:
     assert reset.json()["cash"] == 100000.0
     assert reset.json()["holdings"] == []
     assert client.get("/api/transactions").json() == []
+
+
+def test_a_failed_quote_does_not_read_as_a_loss(client: TestClient, market: FakeMarket) -> None:
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    # Finnhub goes flaky on AAPL right after the buy.
+    market.failing.add("AAPL")
+
+    portfolio = client.get("/api/portfolio").json()
+
+    # The position is carried at what it cost, so the totals hold. Dropping it would have
+    # shown a $1,500 loss the user never took.
+    assert portfolio["unpriced_symbols"] == ["AAPL"]
+    assert portfolio["total_value"] == 100000.0
+    assert portfolio["total_gain_loss"] == 0.0
+    # The row itself is honest about having no live price.
+    assert portfolio["holdings"][0]["price"] is None
+
+
+def test_history_draws_the_portfolio_against_the_index(
+    client: TestClient, db_session: Session
+) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+
+    body = client.get("/api/portfolio/history").json()
+
+    assert body["benchmark_symbol"] == "SPY"
+    assert [point["date"] for point in body["points"]] == [d.isoformat() for d in CHART_DAYS]
+
+    # Both lines start at the starting balance, which is what makes the comparison fair.
+    assert body["points"][0]["portfolio"] == 100000.0
+    assert body["points"][0]["benchmark"] == 100000.0
+
+    # The buy filled at the live quote (150) today, so 98,500 cash + 10 shares at today's
+    # close of 150 = 100,000. Flat.
+    comparison = body["comparison"]
+    assert comparison["portfolio_value"] == 100000.0
+    assert comparison["portfolio_percent"] == 0.0
+    # The index went 500 -> 550, so the same $100k would have been $110,000.
+    assert comparison["benchmark_value"] == 110000.0
+    assert comparison["benchmark_percent"] == 10.0
+    # Which means the index is $10,000 ahead. That is the lesson.
+    assert comparison["difference"] == -10000.0
+
+
+def test_history_of_an_untouched_account_is_flat_cash(
+    client: TestClient, db_session: Session
+) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+
+    body = client.get("/api/portfolio/history").json()
+
+    assert [point["portfolio"] for point in body["points"]] == [100000.0] * 3
+    # Sitting in cash while the market climbed 10% is itself the teaching moment.
+    assert body["comparison"]["difference"] == -10000.0
+
+
+def test_history_still_draws_your_line_when_the_index_is_unavailable(
+    client: TestClient, db_session: Session, candles: FakeCandles
+) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    candles.failing.add("SPY")
+
+    body = client.get("/api/portfolio/history").json()
+
+    # No index to compare against, but the user's own line is still correct.
+    assert body["benchmark_symbol"] is None
+    assert body["comparison"] is None
+    assert [point["benchmark"] for point in body["points"]] == [None] * 3
+    assert body["points"][-1]["portfolio"] == 100000.0
+
+
+def test_history_refuses_to_draw_a_wrong_line(
+    client: TestClient, db_session: Session, candles: FakeCandles
+) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    # Without AAPL's history we cannot value the position on any past day, and a chart
+    # that silently leaves it out would understate the user's money.
+    candles.failing.add("AAPL")
+
+    response = client.get("/api/portfolio/history")
+
+    assert response.status_code == 502
+    assert "history" in response.json()["detail"].lower()
 
 
 def test_round2_normalizes_negative_zero() -> None:

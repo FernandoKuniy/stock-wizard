@@ -20,7 +20,14 @@ from services.market.client import MarketError
 
 TWELVE_DATA_BASE_URL = "https://api.twelvedata.com"
 CANDLE_TTL_SECONDS = 60.0 * 60.0
+# What a caller gets if they don't ask for more: about a quarter, which is what the
+# stock page's price chart shows.
 DEFAULT_OUTPUTSIZE = 90
+# What we actually fetch, every time: roughly two years of daily bars. A request costs
+# the same whether it returns 90 rows or 500, so we pull the long window once, cache it
+# per symbol, and serve the short chart and the portfolio history from the same copy.
+# That halves the calls we make against the free tier.
+FETCH_OUTPUTSIZE = 500
 
 
 @dataclass(frozen=True)
@@ -56,15 +63,18 @@ class CandleClient:
         self._cache: TtlCache[Candles] = TtlCache(ttl_seconds)
 
     def get_candles(self, symbol: str, *, outputsize: int = DEFAULT_OUTPUTSIZE) -> Candles:
-        """Return recent daily candles for ``symbol``, oldest bar first."""
+        """Return the most recent ``outputsize`` daily candles for ``symbol``, oldest bar first.
+
+        Asking for fewer bars is a slice of the cached long window, not a second call.
+        """
         symbol = symbol.upper()
-        key = f"{symbol}:{outputsize}"
-        cached = self._cache.get(key)
-        if cached is not None:
-            return cached
-        candles = self._fetch_candles(symbol, outputsize)
-        self._cache.set(key, candles)
-        return candles
+        candles = self._cache.get(symbol)
+        if candles is None:
+            candles = self._fetch_candles(symbol, FETCH_OUTPUTSIZE)
+            self._cache.set(symbol, candles)
+        if outputsize >= len(candles.points):
+            return candles
+        return Candles(symbol=candles.symbol, points=candles.points[-outputsize:])
 
     def _fetch_candles(self, symbol: str, outputsize: int) -> Candles:
         if not self._api_key:

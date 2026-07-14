@@ -7,6 +7,7 @@ JSON. No financial figure is computed here beyond rounding for display.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 
@@ -21,17 +22,27 @@ from db import get_db
 from deps import get_current_account
 from models import Account, Holding, Transaction
 from schemas import (
+    BenchmarkComparisonOut,
     CandlePointOut,
     CandlesOut,
     CompanyProfileOut,
+    HistoryPointOut,
     HoldingOut,
     OrderRequest,
     OrderResultOut,
+    PortfolioHistoryOut,
     PortfolioOut,
     QuoteOut,
     StockOut,
     SymbolMatchOut,
     TransactionOut,
+)
+from services.analysis.history import (
+    Trade,
+    ValuePoint,
+    benchmark_series,
+    compare_to_benchmark,
+    portfolio_value_series,
 )
 from services.analysis.portfolio import (
     Position,
@@ -42,7 +53,7 @@ from services.analysis.portfolio import (
     position_weights,
     total_gain_loss,
 )
-from services.market.candles import CandleClient, get_candle_client
+from services.market.candles import CandleClient, Candles, get_candle_client
 from services.market.client import (
     CompanyProfile,
     MarketClient,
@@ -53,6 +64,12 @@ from services.market.client import (
 from services.sim.engine import SimError, buy, reset, sell
 
 app = FastAPI(title="Stock Wizard API")
+
+# The index we measure everyone against. SPY tracks the S&P 500, and it is just another
+# symbol as far as the market layer is concerned.
+BENCHMARK_SYMBOL = "SPY"
+# About two years of daily bars, which is the whole cached window (see candles.py).
+HISTORY_OUTPUTSIZE = 500
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,18 +155,27 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         )
     )
 
-    prices: dict[str, Decimal] = {}
+    quoted: dict[str, Decimal] = {}
+    unpriced: list[str] = []
     for holding in holdings:
         try:
-            prices[holding.symbol] = Decimal(str(market.get_quote(holding.symbol).price))
+            quoted[holding.symbol] = Decimal(str(market.get_quote(holding.symbol).price))
         except MarketError:
-            continue  # price unavailable right now; that row degrades gracefully
+            unpriced.append(holding.symbol)
 
-    priced = [Position(h.symbol, h.quantity, h.avg_cost) for h in holdings if h.symbol in prices]
+    # A holding we couldn't get a quote for is carried in the totals at what it cost.
+    # Leaving it out instead would shrink the portfolio by the whole position, so one
+    # flaky Finnhub call would show up as a loss the user never actually took.
+    for_totals = dict(quoted)
+    for holding in holdings:
+        if holding.symbol in unpriced:
+            for_totals[holding.symbol] = holding.avg_cost
+
+    positions = [Position(h.symbol, h.quantity, h.avg_cost) for h in holdings]
     cash = account.cash_balance
-    total_value = portfolio_total_value(cash, priced, prices)
-    gain_loss = total_gain_loss(cash, account.starting_balance, priced, prices)
-    weights = position_weights(cash, priced, prices)
+    total_value = portfolio_total_value(cash, positions, for_totals)
+    gain_loss = total_gain_loss(cash, account.starting_balance, positions, for_totals)
+    weights = position_weights(cash, positions, for_totals)
 
     total_cost_basis = Decimal(0)
     for holding in holdings:
@@ -164,7 +190,88 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         total_gain_loss=_round2(gain_loss.absolute),
         total_gain_loss_percent=_round2(gain_loss.percent),
         cash_weight=_round2(cash_weight),
-        holdings=[_holding_out(h, prices, weights) for h in holdings],
+        holdings=[_holding_out(h, quoted, weights) for h in holdings],
+        unpriced_symbols=unpriced,
+    )
+
+
+@app.get("/api/portfolio/history")
+def read_portfolio_history(
+    account: AccountDep, session: SessionDep, candles: CandleDep
+) -> PortfolioHistoryOut:
+    """The performance chart: what the account has been worth, against the S&P 500.
+
+    Rebuilt from the transactions and real closing prices rather than read from a stored
+    snapshot, so it is exact from the account's first day. See services/analysis/history.py.
+    """
+    rows = list(
+        session.scalars(
+            select(Transaction)
+            .where(Transaction.account_id == account.id)
+            .order_by(Transaction.timestamp)
+        )
+    )
+    trades = [
+        Trade(
+            symbol=row.symbol,
+            side=row.side,
+            quantity=row.quantity,
+            price=row.price,
+            on=row.timestamp.date(),
+        )
+        for row in rows
+    ]
+
+    # Every symbol the account has ever touched, not just what it holds now: a stock sold
+    # last month still has to be priced on the days it was held.
+    closes: dict[str, dict[date, Decimal]] = {}
+    for symbol in sorted({trade.symbol for trade in trades}):
+        try:
+            closes[symbol] = _closes(candles.get_candles(symbol, outputsize=HISTORY_OUTPUTSIZE))
+        except MarketError as exc:
+            # Without this symbol's prices the whole line would be wrong, and a wrong chart
+            # about someone's money is worse than no chart. Say so instead of drawing it.
+            raise HTTPException(
+                status_code=502, detail="Couldn't load your performance history right now."
+            ) from exc
+
+    try:
+        benchmark_closes = _closes(
+            candles.get_candles(BENCHMARK_SYMBOL, outputsize=HISTORY_OUTPUTSIZE)
+        )
+    except MarketError:
+        benchmark_closes = {}  # the user's own line is still correct; we just can't compare
+
+    opened_on = account.created_at.date()
+    dates = _trading_days(opened_on, benchmark_closes, closes)
+
+    portfolio = portfolio_value_series(account.starting_balance, trades, closes, dates)
+    benchmark = benchmark_series(account.starting_balance, benchmark_closes, dates)
+    comparison = compare_to_benchmark(account.starting_balance, portfolio, benchmark)
+    by_date: dict[date, ValuePoint] = {point.on: point for point in benchmark}
+
+    return PortfolioHistoryOut(
+        starting_balance=_round2(account.starting_balance),
+        benchmark_symbol=BENCHMARK_SYMBOL if benchmark else None,
+        points=[
+            HistoryPointOut(
+                date=point.on.isoformat(),
+                portfolio=_round2(point.value),
+                benchmark=_round2(by_date[point.on].value) if point.on in by_date else None,
+            )
+            for point in portfolio
+        ],
+        comparison=(
+            BenchmarkComparisonOut(
+                portfolio_value=_round2(comparison.portfolio_value),
+                benchmark_value=_round2(comparison.benchmark_value),
+                difference=_round2(comparison.difference),
+                portfolio_percent=_round2(comparison.portfolio_percent),
+                benchmark_percent=_round2(comparison.benchmark_percent),
+            )
+            if comparison is not None
+            else None
+        ),
     )
 
 
@@ -203,6 +310,29 @@ def reset_account(account: AccountDep, session: SessionDep, market: MarketDep) -
     reset(session, account)
     session.commit()
     return read_portfolio(account, session, market)
+
+
+def _closes(candles: Candles) -> dict[date, Decimal]:
+    """A symbol's daily closes, keyed by day, as exact Decimals for the analysis layer."""
+    return {date.fromisoformat(point.date): Decimal(str(point.close)) for point in candles.points}
+
+
+def _trading_days(
+    opened_on: date,
+    benchmark_closes: dict[date, Decimal],
+    closes: dict[str, dict[date, Decimal]],
+) -> list[date]:
+    """The days the chart has a point for: every market day since the account opened.
+
+    The index's own trading days are the natural calendar, since it trades whenever the
+    US market is open. If we couldn't fetch it, fall back to the days the held symbols
+    traded, and failing even that, to the single day the account opened.
+    """
+    if benchmark_closes:
+        days = sorted(day for day in benchmark_closes if day >= opened_on)
+    else:
+        days = sorted({day for bars in closes.values() for day in bars if day >= opened_on})
+    return days or [opened_on]
 
 
 def _execute_order(

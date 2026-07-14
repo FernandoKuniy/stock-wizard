@@ -8,7 +8,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from services.market.candles import CandleClient
+from services.market.candles import FETCH_OUTPUTSIZE, CandleClient
 from services.market.client import MarketError
 
 
@@ -55,6 +55,27 @@ def test_get_candles_is_cached() -> None:
     client.get_candles("AAPL")
     client.get_candles("AAPL")
     assert calls == 1
+
+
+def test_one_fetch_serves_both_the_short_chart_and_the_long_history() -> None:
+    """We always pull the long window and slice it, rather than paying for two calls."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.url.params["outputsize"] == str(FETCH_OUTPUTSIZE)
+        return httpx.Response(200, json=_timeseries_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+
+    long_window = client.get_candles("AAPL", outputsize=FETCH_OUTPUTSIZE)
+    short_window = client.get_candles("AAPL", outputsize=1)
+
+    assert calls == 1  # the free tier thanks us
+    assert len(long_window.points) == 2  # the payload only has two bars to give
+    # The short window is the tail of the same data, newest bar last.
+    assert [p.date for p in short_window.points] == ["2026-07-10"]
 
 
 def test_missing_api_key_raises() -> None:

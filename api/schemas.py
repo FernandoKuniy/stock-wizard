@@ -88,6 +88,36 @@ class PortfolioOut(BaseModel):
     total_gain_loss_percent: float
     cash_weight: float
     holdings: list[HoldingOut]
+    # Symbols we couldn't get a live price for just now. They're counted in the totals at
+    # what they cost, so a flaky quote can't quietly shrink the portfolio and read as a
+    # loss the user never took. The UI says so rather than pretending the number is fresh.
+    unpriced_symbols: list[str]
+
+
+class HistoryPointOut(BaseModel):
+    """One day on the performance chart. ``benchmark`` is null if we have no index price."""
+
+    date: str
+    portfolio: float
+    benchmark: float | None
+
+
+class BenchmarkComparisonOut(BaseModel):
+    """Where the user ended up versus the same money left in the index."""
+
+    portfolio_value: float
+    benchmark_value: float
+    # Positive means the user is ahead of the index, in dollars.
+    difference: float
+    portfolio_percent: float
+    benchmark_percent: float
+
+
+class PortfolioHistoryOut(BaseModel):
+    starting_balance: float
+    benchmark_symbol: str | None
+    points: list[HistoryPointOut]
+    comparison: BenchmarkComparisonOut | None
 
 
 class TransactionOut(BaseModel):
