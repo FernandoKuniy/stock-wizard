@@ -112,9 +112,13 @@ All external data calls and all caching live here. Nothing else touches a provid
   limit to be aware of before anyone widens the demo portfolio.
 - Company profile and symbol search: from Finnhub. The profile drives a plain-language,
   code-composed "what is this company" blurb (no LLM). Cache profiles for a long time.
-- News: recent articles per symbol, from Finnhub's company-news endpoint, cached for ten
-  minutes. The tutor's `get_recent_news` tool uses it to answer "why did this move?"; only a
-  symbol the user actually asks about is fetched, so it stays well under the 60/min tier.
+- News: recent articles per symbol (a handful from the last week), from Finnhub's
+  company-news endpoint, cached for ten minutes. Two things read it, both fetching only a
+  symbol the user is actually looking at, so it stays well under the 60/min tier: the tutor's
+  `get_recent_news` tool answers "why did this move?", and the stock page's `GET
+  /api/stock/{symbol}/news` route (M4) feeds a "Recent news" section. Each headline links out
+  and is attributed to its source; the numbers inside a headline are the source's words, not
+  our computed figures.
 
 Both providers sit behind one `MarketError` contract, so no raw provider error reaches the
 user and swapping a provider stays a market-layer change.

@@ -79,6 +79,16 @@ export type CompanyProfile = {
 
 export type Stock = { quote: Quote; profile: CompanyProfile | null };
 
+// One recent article about a company. `date` is an ISO date, or "" if the source omitted it.
+// The numbers inside a headline are the source's words, never our computed figures.
+export type NewsItem = {
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  date: string;
+};
+
 export type CandlePoint = { date: string; close: number };
 export type Candles = { symbol: string; points: CandlePoint[] };
 
@@ -148,6 +158,9 @@ export const getStock = (symbol: string, token: Token) =>
 
 export const getCandles = (symbol: string, token: Token) =>
   request<Candles>(`/api/stock/${encodeURIComponent(symbol)}/candles`, token);
+
+export const getNews = (symbol: string, token: Token) =>
+  request<NewsItem[]>(`/api/stock/${encodeURIComponent(symbol)}/news`, token);
 
 export const placeOrder = (order: OrderInput, token: Token) =>
   request<OrderResult>("/api/orders", token, { method: "POST", body: JSON.stringify(order) });

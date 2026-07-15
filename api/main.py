@@ -28,6 +28,7 @@ from schemas import (
     CompanyProfileOut,
     HistoryPointOut,
     HoldingOut,
+    NewsItemOut,
     OrderRequest,
     OrderResultOut,
     PortfolioHistoryOut,
@@ -140,6 +141,31 @@ def read_candles(symbol: str, candles: CandleDep) -> CandlesOut:
         symbol=series.symbol,
         points=[CandlePointOut(date=p.date, close=p.close) for p in series.points],
     )
+
+
+@app.get("/api/stock/{symbol}/news", dependencies=signed_in)
+def read_news(symbol: str, market: MarketDep) -> list[NewsItemOut]:
+    """Return recent news headlines for a symbol, for the stock page's news section.
+
+    Thin wrapper over the market client, which already trims to the most recent handful and
+    caches for a few minutes. Only a symbol the user is actually viewing is fetched, so this
+    stays well under the Finnhub tier. News is a nice-to-have: a failure is a 502 and the
+    stock page just hides the section rather than breaking.
+    """
+    try:
+        items = market.get_company_news(symbol)
+    except MarketError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return [
+        NewsItemOut(
+            headline=item.headline,
+            summary=item.summary,
+            source=item.source,
+            url=item.url,
+            date=item.date,
+        )
+        for item in items
+    ]
 
 
 @app.get("/api/portfolio")

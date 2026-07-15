@@ -88,12 +88,20 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 
 - [ ] Limit orders (with the market-vs-limit teaching moment).
 - [x] Watchlists.
-- [ ] Per-stock news feed.
+- [x] Per-stock news feed.
 - [ ] Historical "time machine" mode.
 - [ ] Achievements and streaks.
 
 ## Progress log
 
+- 2026-07-15  M4 (per-stock news feed) done, verified end to end in the browser. The second
+  extra, and the smallest: the Finnhub company-news fetch and its ten-minute cache already
+  existed from M3, so this is a thin `GET /api/stock/{symbol}/news` route (signed-in, degrades
+  to a 502 the page hides) plus a "Recent news" section on the stock page, showing up to six
+  recent headlines with source and date, each linking out. Verified live against AMZN (six
+  headlines, correct attribution, no console errors). 154 backend tests green (3 new: returns
+  articles, needs a token, degrades on outage); ruff + mypy clean; web passes eslint + prettier
+  + tsc.
 - 2026-07-15  M4 (watchlists) code complete, first of the extras. A new `watchlist_items` table
   (account-scoped, unique on (account, symbol), migration 0003) plus three thin routes scoped
   through `get_current_account`: list (with a live quote per symbol that degrades to null one

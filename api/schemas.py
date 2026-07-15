@@ -55,6 +55,17 @@ class StockOut(BaseModel):
     profile: CompanyProfileOut | None
 
 
+class NewsItemOut(BaseModel):
+    """One recent article about a company. ``date`` is an ISO date, or "" if the provider
+    omitted it. The numbers inside a headline are the source's words, not our figures."""
+
+    headline: str
+    summary: str
+    source: str
+    url: str
+    date: str
+
+
 class CandlePointOut(BaseModel):
     date: str
     close: float

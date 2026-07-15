@@ -1,15 +1,18 @@
 import Link from "next/link";
 
+import { NewsFeed } from "@/components/NewsFeed";
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
 import { Term } from "@/components/Term";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import {
   getCandles,
+  getNews,
   getPortfolio,
   getStock,
   getWatchlist,
   type CandlePoint,
+  type NewsItem,
   type Stock,
 } from "@/lib/api";
 import { formatCompactMoney, formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
@@ -43,6 +46,13 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     candles = (await getCandles(upper, token)).points;
   } catch {
     candles = null; // chart unavailable (e.g. no Twelve Data key); the page still works
+  }
+
+  let news: NewsItem[] = [];
+  try {
+    news = await getNews(upper, token);
+  } catch {
+    news = []; // news is a nice-to-have; hide the section rather than break the page
   }
 
   let cash = 0;
@@ -114,6 +124,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               </div>
             </div>
           )}
+
+          <NewsFeed items={news} />
         </div>
 
         <div className="lg:col-span-1">

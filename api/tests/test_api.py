@@ -32,6 +32,7 @@ from services.market.candles import CandlePoint, Candles, get_candle_client
 from services.market.client import (
     CompanyProfile,
     MarketError,
+    NewsItem,
     Quote,
     SymbolMatch,
     get_market_client,
@@ -79,6 +80,27 @@ class FakeMarket:
         return CompanyProfile(
             symbol.upper(), "Apple Inc", "NASDAQ", "Technology", "", 2.9e12, "A tech company."
         )
+
+    def get_company_news(self, symbol: str) -> list[NewsItem]:
+        symbol = symbol.upper()
+        if symbol in self.failing:
+            raise MarketError(f"No news available for {symbol}.")
+        return [
+            NewsItem(
+                headline=f"{symbol} beats expectations",
+                summary="A short summary of the day.",
+                source="Reuters",
+                url="https://example.com/1",
+                date="2026-07-14",
+            ),
+            NewsItem(
+                headline=f"Analysts weigh in on {symbol}",
+                summary="Another summary.",
+                source="Bloomberg",
+                url="https://example.com/2",
+                date="2026-07-13",
+            ),
+        ]
 
 
 # Three trading days ending today, so the history spine has something to walk.
@@ -236,6 +258,27 @@ def test_candles(client: TestClient) -> None:
     points = client.get("/api/stock/AAPL/candles").json()["points"]
     assert [p["date"] for p in points] == [day.isoformat() for day in CHART_DAYS]
     assert [p["close"] for p in points] == CHART_CLOSES["AAPL"]
+
+
+def test_stock_news_returns_recent_articles(client: TestClient) -> None:
+    body = client.get("/api/stock/AAPL/news").json()
+    assert [item["headline"] for item in body] == [
+        "AAPL beats expectations",
+        "Analysts weigh in on AAPL",
+    ]
+    assert body[0]["source"] == "Reuters"
+    assert body[0]["url"].startswith("https://")
+
+
+def test_stock_news_needs_a_token(anon_client: TestClient) -> None:
+    # News spends Finnhub quota, so it's for signed-in users only, like the other market routes.
+    assert anon_client.get("/api/stock/AAPL/news").status_code == 401
+
+
+def test_stock_news_degrades_when_unavailable(client: TestClient, market: FakeMarket) -> None:
+    market.failing.add("AAPL")
+    # A news outage is a 502; the stock page hides the section rather than breaking.
+    assert client.get("/api/stock/AAPL/news").status_code == 502
 
 
 def test_buy_updates_cash_and_portfolio(client: TestClient) -> None:
