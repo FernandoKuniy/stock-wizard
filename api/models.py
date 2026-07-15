@@ -10,7 +10,16 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Uuid, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -45,6 +54,7 @@ class Account(Base):
     user: Mapped[User] = relationship(back_populates="accounts")
     holdings: Mapped[list[Holding]] = relationship(back_populates="account")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
+    watchlist_items: Mapped[list[WatchlistItem]] = relationship(back_populates="account")
 
 
 class Holding(Base):
@@ -72,3 +82,20 @@ class Transaction(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")
+
+
+class WatchlistItem(Base):
+    """A symbol an account is tracking, without owning it. No money is involved: this is
+    just a list of tickers the user wants to keep an eye on, scoped to their account like
+    everything else. One row per (account, symbol); adding a symbol already present is a
+    no-op."""
+
+    __tablename__ = "watchlist_items"
+    __table_args__ = (UniqueConstraint("account_id", "symbol", name="uq_watchlist_account_symbol"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped[Account] = relationship(back_populates="watchlist_items")

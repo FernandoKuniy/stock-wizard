@@ -125,6 +125,8 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
     throw new Error(detail);
   }
 
+  // A 204 (e.g. a DELETE) carries no body, so don't try to parse one.
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -160,3 +162,25 @@ export const askTutor = (messages: TutorMessage[], token: Token) =>
     method: "POST",
     body: JSON.stringify({ messages }),
   });
+
+// A stock the user is tracking without owning. Price fields are null when the live quote
+// is unavailable, the same way a holding degrades, so one flaky quote never hides the list.
+export type WatchlistItem = {
+  symbol: string;
+  price: number | null;
+  percent_change: number | null;
+};
+
+// Pass includeQuotes=false when you only need to know what's watched (the stock page's
+// star), so the backend doesn't spend quote quota on tickers the user isn't looking at.
+export const getWatchlist = (token: Token, includeQuotes = true) =>
+  request<WatchlistItem[]>(`/api/watchlist?include_quotes=${includeQuotes}`, token);
+
+export const addToWatchlist = (symbol: string, token: Token) =>
+  request<WatchlistItem>("/api/watchlist", token, {
+    method: "POST",
+    body: JSON.stringify({ symbol }),
+  });
+
+export const removeFromWatchlist = (symbol: string, token: Token) =>
+  request<void>(`/api/watchlist/${encodeURIComponent(symbol)}`, token, { method: "DELETE" });

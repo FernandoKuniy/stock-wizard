@@ -87,13 +87,27 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 ## M4. Extras
 
 - [ ] Limit orders (with the market-vs-limit teaching moment).
-- [ ] Watchlists.
+- [x] Watchlists.
 - [ ] Per-stock news feed.
 - [ ] Historical "time machine" mode.
 - [ ] Achievements and streaks.
 
 ## Progress log
 
+- 2026-07-15  M4 (watchlists) code complete, first of the extras. A new `watchlist_items` table
+  (account-scoped, unique on (account, symbol), migration 0003) plus three thin routes scoped
+  through `get_current_account`: list (with a live quote per symbol that degrades to null one
+  symbol at a time, like the dashboard's stale holdings), add (validated against a live quote so
+  a junk ticker is never stored, idempotent), and delete (204, no-op if absent). The list
+  endpoint takes `include_quotes=false` so the stock page's Watch star can check membership
+  without spending quote quota on a ticker the user isn't viewing. UI: a Watch button on the
+  stock page is the way to add, and the dashboard shows the list with a remove control and a
+  first-time explainer, appearing only once something is watched. 149 backend tests green (8 new,
+  covering add/list/remove, ordering, idempotency, unknown-symbol rejection, per-symbol quote
+  degradation, the membership-only fetch, and account isolation); ruff + mypy clean; web passes
+  eslint + prettier + tsc + a production build. Verified as far as the sign-in wall allows (routes
+  wired and auth-gated, migration applied, all pages compile); the signed-in click-through is the
+  one step left, since sign-in needs the user's credentials.
 - 2026-07-15  M3 code complete (browser end-to-end pending an OpenAI key): the AI tutor. Finished
   the analysis layer (concentration/diversification signals and per-position volatility, both pure
   and unit-tested), added a Finnhub company-news fetch, and built `services/tutor/`: an OpenAI

@@ -7,6 +7,13 @@
       "runtimeArgs": ["dev"],
       "cwd": "web",
       "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "main:app", "--reload"],
+      "cwd": "api",
+      "port": 8000
     }
   ]
 }

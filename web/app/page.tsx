@@ -7,11 +7,14 @@ import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
 import { Tutor } from "@/components/Tutor";
+import { Watchlist } from "@/components/Watchlist";
 import {
   getPortfolio,
   getPortfolioHistory,
+  getWatchlist,
   type Portfolio,
   type PortfolioHistory,
+  type WatchlistItem,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
@@ -42,6 +45,15 @@ export default async function Home() {
     history = await getPortfolioHistory(token);
   } catch {
     history = null;
+  }
+
+  // The watchlist is a side panel, not the point of the page, so a failure here just hides
+  // it rather than breaking the dashboard.
+  let watchlist: WatchlistItem[] = [];
+  try {
+    watchlist = await getWatchlist(token);
+  } catch {
+    watchlist = [];
   }
 
   const hasHoldings = portfolio.holdings.length > 0;
@@ -92,6 +104,16 @@ export default async function Home() {
               Your holdings will show up here once you buy your first stock.
             </p>
           </div>
+        )}
+
+        {watchlist.length > 0 && (
+          <>
+            <FirstTimeCallout id="watchlist" title="Your watchlist">
+              These are stocks you&apos;re keeping an eye on. Adding one costs nothing and
+              doesn&apos;t buy anything. Open a stock and hit Watch to track it here.
+            </FirstTimeCallout>
+            <Watchlist items={watchlist} />
+          </>
         )}
 
         <Tutor />

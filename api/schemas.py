@@ -151,3 +151,20 @@ class TutorRequest(BaseModel):
 
 class TutorReplyOut(BaseModel):
     reply: str
+
+
+class WatchlistAddRequest(BaseModel):
+    """A symbol to start tracking. Validated against a live quote before it's stored, so
+    we never save a ticker that doesn't resolve."""
+
+    symbol: str
+
+
+class WatchlistItemOut(BaseModel):
+    """One watched symbol with a live quote for the list. ``price`` and ``percent_change``
+    are null when the quote is unavailable, so a flaky provider reads as "unknown" rather
+    than blocking the whole list (the same treatment holdings get)."""
+
+    symbol: str
+    price: float | None
+    percent_change: float | None

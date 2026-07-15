@@ -183,6 +183,9 @@ def test_health_needs_no_token(anon_client: TestClient) -> None:
         ("post", "/api/account/reset"),
         ("post", "/api/orders"),
         ("post", "/api/tutor"),
+        ("get", "/api/watchlist"),
+        ("post", "/api/watchlist"),
+        ("delete", "/api/watchlist/AAPL"),
     ],
 )
 def test_account_routes_require_a_token(anon_client: TestClient, method: str, path: str) -> None:
@@ -433,6 +436,75 @@ def test_one_users_tutor_never_sees_anothers_money(
     body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
     assert client.post("/api/tutor", json=body).status_code == 200
     assert sams_client.post("/api/tutor", json=body).status_code == 200
+
+
+def test_watchlist_add_list_and_remove(client: TestClient) -> None:
+    added = client.post("/api/watchlist", json={"symbol": "aapl"})
+    assert added.status_code == 200, added.text
+    # Stored uppercased, and the quote we validated with is handed straight back.
+    assert added.json() == {"symbol": "AAPL", "price": 150.0, "percent_change": 0.0}
+
+    assert client.get("/api/watchlist").json() == [
+        {"symbol": "AAPL", "price": 150.0, "percent_change": 0.0}
+    ]
+
+    removed = client.delete("/api/watchlist/aapl")
+    assert removed.status_code == 204
+    assert client.get("/api/watchlist").json() == []
+
+
+def test_watchlist_is_ordered_by_symbol(client: TestClient) -> None:
+    client.post("/api/watchlist", json={"symbol": "MSFT"})
+    client.post("/api/watchlist", json={"symbol": "AAPL"})
+    symbols = [item["symbol"] for item in client.get("/api/watchlist").json()]
+    assert symbols == ["AAPL", "MSFT"]
+
+
+def test_watchlist_add_is_idempotent(client: TestClient) -> None:
+    client.post("/api/watchlist", json={"symbol": "AAPL"})
+    second = client.post("/api/watchlist", json={"symbol": "AAPL"})
+    # Adding a symbol already on the list is fine, and doesn't duplicate it.
+    assert second.status_code == 200
+    assert [item["symbol"] for item in client.get("/api/watchlist").json()] == ["AAPL"]
+
+
+def test_watchlist_rejects_a_symbol_with_no_quote(client: TestClient, market: FakeMarket) -> None:
+    market.failing.add("ZZZZ")
+    resp = client.post("/api/watchlist", json={"symbol": "ZZZZ"})
+    assert resp.status_code == 502
+    # A symbol that doesn't resolve is never stored, so it can't clutter the list.
+    assert client.get("/api/watchlist").json() == []
+
+
+def test_watchlist_degrades_when_a_quote_fails(client: TestClient, market: FakeMarket) -> None:
+    client.post("/api/watchlist", json={"symbol": "AAPL"})
+    # The quote goes flaky after AAPL is already on the list.
+    market.failing.add("AAPL")
+    # The symbol still shows up; only its price is null, just like a stale holding.
+    assert client.get("/api/watchlist").json() == [
+        {"symbol": "AAPL", "price": None, "percent_change": None}
+    ]
+
+
+def test_watchlist_can_skip_quotes_for_a_membership_check(client: TestClient) -> None:
+    client.post("/api/watchlist", json={"symbol": "AAPL"})
+    # The stock page's star only needs to know what's watched, without spending quote
+    # quota on a ticker the user isn't actually looking at.
+    assert client.get("/api/watchlist", params={"include_quotes": "false"}).json() == [
+        {"symbol": "AAPL", "price": None, "percent_change": None}
+    ]
+
+
+def test_one_users_watchlist_never_touches_anothers(
+    client: TestClient, sams_client: TestClient
+) -> None:
+    client.post("/api/watchlist", json={"symbol": "AAPL"})
+
+    # Sam sees their own empty list, and removing AAPL from Sam's account can't reach
+    # into Alex's.
+    assert sams_client.get("/api/watchlist").json() == []
+    assert sams_client.delete("/api/watchlist/AAPL").status_code == 204
+    assert [item["symbol"] for item in client.get("/api/watchlist").json()] == ["AAPL"]
 
 
 def test_round2_normalizes_negative_zero() -> None:

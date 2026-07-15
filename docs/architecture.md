@@ -34,7 +34,9 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
   now. The starting_balance lets us compute total return and power the reset.)
 - `holdings`: id, account_id, symbol, quantity, avg_cost. (avg_cost drives per-position P/L.)
 - `transactions`: id, account_id, symbol, side (buy/sell), quantity, price, timestamp.
-- `watchlist_items` (later): id, account_id, symbol.
+- `watchlist_items`: id, account_id, symbol, created_at, with a unique constraint on
+  (account_id, symbol). Symbols the account is tracking without owning. No money columns:
+  a watchlist is just a list of tickers. Added in M4.
 
 Reset = set cash_balance back to starting_balance, delete holdings and transactions for
 that account.
@@ -228,6 +230,29 @@ the model can ask for figures but can never compute them itself. Built in M3.
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
+
+## Watchlists (M4)
+
+Symbols the user is tracking without owning. No money is involved, so this is deliberately
+simple: account-scoped CRUD over `watchlist_items`, with no analysis or sim layer in the
+path. Three routes, all scoped to `get_current_account` like every other account route (the
+only thing keeping one user's list out of another's):
+
+- `GET /api/watchlist` returns the account's symbols, each with a live quote (price and day
+  change). A symbol whose quote fails is still returned, with null price fields, so one
+  flaky quote never hides the rest of the list, exactly the degradation holdings get on the
+  dashboard. An `include_quotes=false` query param skips the quotes and returns symbols
+  only: the stock page's star uses it to learn whether a symbol is watched without spending
+  quote quota on a ticker the user isn't actually looking at (the "only fetch what a user is
+  viewing" rule).
+- `POST /api/watchlist` validates the symbol against a live quote before storing it, so a
+  ticker that doesn't resolve is never saved, and hands that quote back. Adding a symbol
+  already on the list is a no-op, enforced by the unique constraint.
+- `DELETE /api/watchlist/{symbol}` removes one (a no-op if it isn't there), returning 204.
+
+In the UI, adding happens on the stock page (a Watch button), and the dashboard shows the
+list with a live price and a remove control. The list section only appears once the account
+has watched something; the ever-present Watch button is the way in.
 
 ## Secrets and config
 

@@ -3,7 +3,15 @@ import Link from "next/link";
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
 import { Term } from "@/components/Term";
-import { getCandles, getPortfolio, getStock, type CandlePoint, type Stock } from "@/lib/api";
+import { WatchlistStar } from "@/components/WatchlistStar";
+import {
+  getCandles,
+  getPortfolio,
+  getStock,
+  getWatchlist,
+  type CandlePoint,
+  type Stock,
+} from "@/lib/api";
 import { formatCompactMoney, formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
 
@@ -47,6 +55,15 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     // leave defaults; the order form still works and the backend is authoritative
   }
 
+  // Just the symbols, no quotes: we only need to know whether this one is already watched.
+  let watched = false;
+  try {
+    const items = await getWatchlist(token, false);
+    watched = items.some((item) => item.symbol === upper);
+  } catch {
+    // membership is a nicety; the Watch button still works if we couldn't check
+  }
+
   const { quote, profile } = stock;
   const up = quote.change >= 0;
 
@@ -58,17 +75,22 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
 
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <div>
-            <div className="text-sm text-zinc-500">{profile?.name ?? quote.symbol}</div>
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight">{quote.symbol}</h1>
-              <span className="text-3xl font-semibold tabular-nums">
-                {formatMoney(quote.price)}
-              </span>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm text-zinc-500">{profile?.name ?? quote.symbol}</div>
+              <div className="flex items-baseline gap-3">
+                <h1 className="text-3xl font-semibold tracking-tight">{quote.symbol}</h1>
+                <span className="text-3xl font-semibold tabular-nums">
+                  {formatMoney(quote.price)}
+                </span>
+              </div>
+              <div
+                className={`mt-1 text-sm tabular-nums ${up ? "text-green-600" : "text-red-600"}`}
+              >
+                {formatSignedMoney(quote.change)} ({formatPercent(quote.percent_change)}) today
+              </div>
             </div>
-            <div className={`mt-1 text-sm tabular-nums ${up ? "text-green-600" : "text-red-600"}`}>
-              {formatSignedMoney(quote.change)} ({formatPercent(quote.percent_change)}) today
-            </div>
+            <WatchlistStar symbol={quote.symbol} initialWatched={watched} />
           </div>
 
           {candles ? (
