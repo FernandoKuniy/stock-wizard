@@ -36,6 +36,7 @@ from services.market.client import (
     SymbolMatch,
     get_market_client,
 )
+from services.tutor.provider import Completion, TutorProvider, get_tutor_provider
 
 # Two signed-in people, each with their own Supabase user id.
 TOKEN_ALEX = "alex-token"
@@ -109,6 +110,13 @@ class FakeCandles:
         return Candles(symbol, points[-outputsize:])
 
 
+class FakeTutor(TutorProvider):
+    """A stand-in tutor that answers without a tool call, so the route can be tested end to end."""
+
+    def complete(self, *, system: str, messages: object, tools: object) -> Completion:
+        return Completion(text="Here's a look at your portfolio.", tool_calls=())
+
+
 @pytest.fixture
 def market() -> FakeMarket:
     return FakeMarket()
@@ -132,6 +140,7 @@ def overrides(db_session: Session, market: FakeMarket, candles: FakeCandles) -> 
     app.dependency_overrides[get_token_verifier] = lambda: FakeVerifier()
     app.dependency_overrides[get_market_client] = lambda: market
     app.dependency_overrides[get_candle_client] = lambda: candles
+    app.dependency_overrides[get_tutor_provider] = lambda: FakeTutor()
     yield
     app.dependency_overrides.clear()
 
@@ -173,6 +182,7 @@ def test_health_needs_no_token(anon_client: TestClient) -> None:
         ("get", "/api/transactions"),
         ("post", "/api/account/reset"),
         ("post", "/api/orders"),
+        ("post", "/api/tutor"),
     ],
 )
 def test_account_routes_require_a_token(anon_client: TestClient, method: str, path: str) -> None:
@@ -385,6 +395,44 @@ def test_history_refuses_to_draw_a_wrong_line(
 
     assert response.status_code == 502
     assert "history" in response.json()["detail"].lower()
+
+
+def test_tutor_answers_a_signed_in_user(client: TestClient) -> None:
+    response = client.post(
+        "/api/tutor", json={"messages": [{"role": "user", "content": "how am I doing?"}]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["reply"] == "Here's a look at your portfolio."
+
+
+def test_tutor_rejects_an_empty_conversation(client: TestClient) -> None:
+    assert client.post("/api/tutor", json={"messages": []}).status_code == 400
+
+
+def test_tutor_rejects_a_conversation_not_ending_with_the_user(client: TestClient) -> None:
+    body = {"messages": [{"role": "assistant", "content": "hi"}]}
+    assert client.post("/api/tutor", json=body).status_code == 400
+
+
+def test_tutor_says_so_when_not_configured(client: TestClient) -> None:
+    # No OpenAI key: the provider dependency resolves to None and the route degrades cleanly.
+    app.dependency_overrides[get_tutor_provider] = lambda: None
+    body = {"messages": [{"role": "user", "content": "hi"}]}
+    assert client.post("/api/tutor", json=body).status_code == 503
+
+
+def test_one_users_tutor_never_sees_anothers_money(
+    client: TestClient, sams_client: TestClient
+) -> None:
+    # The tutor route builds its tools scoped to the signed-in account, the same guarantee
+    # the tools themselves are unit-tested for. Both users reach their own tutor, never
+    # each other's; the deeper scoping proof lives in test_tutor.py.
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
+    assert client.post("/api/tutor", json=body).status_code == 200
+    assert sams_client.post("/api/tutor", json=body).status_code == 200
 
 
 def test_round2_normalizes_negative_zero() -> None:

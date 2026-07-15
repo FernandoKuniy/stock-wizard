@@ -9,6 +9,7 @@ user-safe message, so no raw provider error ever reaches the user.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -21,7 +22,13 @@ FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 DEFAULT_TTL_SECONDS = 15.0
 PROFILE_TTL_SECONDS = 60.0 * 60.0 * 24.0
 SEARCH_TTL_SECONDS = 60.0 * 5.0
+# Headlines change through the day but not by the second, so a few minutes of caching keeps
+# the tutor from spending a Finnhub call every time it's asked "why did this move?".
+NEWS_TTL_SECONDS = 60.0 * 10.0
 MAX_SEARCH_RESULTS = 15
+# How far back to look for company news, and how many of the most recent items to keep.
+NEWS_LOOKBACK_DAYS = 7
+MAX_NEWS_ITEMS = 6
 
 
 class MarketError(Exception):
@@ -64,6 +71,17 @@ class CompanyProfile:
     blurb: str
 
 
+@dataclass(frozen=True)
+class NewsItem:
+    """One recent news article about a company, trimmed to what the tutor needs."""
+
+    headline: str
+    summary: str
+    source: str
+    url: str
+    date: str  # ISO date the article was published, or "" if the provider omitted it
+
+
 class MarketClient:
     """Fetches quotes, profiles, and search results from Finnhub, cached in memory."""
 
@@ -76,6 +94,7 @@ class MarketClient:
         base_url: str = FINNHUB_BASE_URL,
         profile_ttl_seconds: float = PROFILE_TTL_SECONDS,
         search_ttl_seconds: float = SEARCH_TTL_SECONDS,
+        news_ttl_seconds: float = NEWS_TTL_SECONDS,
     ) -> None:
         self._api_key = api_key
         self._client = client or httpx.Client(base_url=base_url, timeout=10.0)
@@ -83,6 +102,7 @@ class MarketClient:
         self._quotes: TtlCache[Quote] = TtlCache(ttl_seconds)
         self._profiles: TtlCache[CompanyProfile] = TtlCache(profile_ttl_seconds)
         self._searches: TtlCache[list[SymbolMatch]] = TtlCache(search_ttl_seconds)
+        self._news: TtlCache[list[NewsItem]] = TtlCache(news_ttl_seconds)
 
     def get_quote(self, symbol: str) -> Quote:
         """Return a quote for ``symbol``, served from cache when still fresh."""
@@ -116,6 +136,16 @@ class MarketClient:
         matches = self._fetch_search(query)
         self._searches.set(key, matches)
         return matches
+
+    def get_company_news(self, symbol: str) -> list[NewsItem]:
+        """Return recent news for ``symbol``, most recent first, served from cache when fresh."""
+        symbol = symbol.upper()
+        cached = self._news.get(symbol)
+        if cached is not None:
+            return cached
+        items = self._fetch_news(symbol)
+        self._news.set(symbol, items)
+        return items
 
     def _fetch_quote(self, symbol: str) -> Quote:
         data = self._get("/quote", {"symbol": symbol})
@@ -175,6 +205,25 @@ class MarketClient:
                 break
         return matches
 
+    def _fetch_news(self, symbol: str) -> list[NewsItem]:
+        today = datetime.now(tz=UTC).date()
+        start = today - timedelta(days=NEWS_LOOKBACK_DAYS)
+        params = {"symbol": symbol, "from": start.isoformat(), "to": today.isoformat()}
+        data = self._get("/company-news", params)
+        if not isinstance(data, list):
+            return []
+        dated: list[tuple[float, NewsItem]] = []
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            headline = str(entry.get("headline") or "").strip()
+            if not headline:
+                continue
+            dated.append((_news_timestamp(entry.get("datetime")), _news_item(entry, headline)))
+        # Finnhub does not promise an order, so sort newest first before trimming.
+        dated.sort(key=lambda pair: pair[0], reverse=True)
+        return [item for _, item in dated[:MAX_NEWS_ITEMS]]
+
     def _get(self, path: str, params: dict[str, str]) -> Any:
         try:
             response = self._client.get(path, params={**params, "token": self._api_key})
@@ -202,6 +251,22 @@ def _compose_blurb(name: str, industry: str, exchange: str) -> str:
     if exchange:
         return f"{name} is publicly traded on {exchange}."
     return f"{name} is a publicly traded company."
+
+
+def _news_timestamp(value: Any) -> float:
+    """Finnhub's unix publish time as a float, or 0.0 when it's missing or unusable."""
+    return float(value) if isinstance(value, int | float) and value > 0 else 0.0
+
+
+def _news_item(entry: dict[str, Any], headline: str) -> NewsItem:
+    published = _news_timestamp(entry.get("datetime"))
+    return NewsItem(
+        headline=headline,
+        summary=str(entry.get("summary") or "").strip(),
+        source=str(entry.get("source") or "").strip(),
+        url=str(entry.get("url") or "").strip(),
+        date=datetime.fromtimestamp(published, tz=UTC).date().isoformat() if published else "",
+    )
 
 
 @lru_cache

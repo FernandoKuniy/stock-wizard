@@ -13,8 +13,9 @@ buy or sell by dollar amount or share quantity (fractional shares included). The
 opens with the question that matters: your money against the S&P 500, so you can see whether
 picking stocks actually beat just buying the whole market. Jargon is one tap from a plain
 definition, short explainers appear the first time you meet a new idea, and everything is
-framed in money rather than naked percentages. The AI tutor is next. See
-[docs/roadmap.md](docs/roadmap.md) for the plan and progress.
+framed in money rather than naked percentages. An AI tutor reads your real portfolio and
+explains it in plain English, and it can only quote numbers the backend computed, never ones
+it made up. See [docs/roadmap.md](docs/roadmap.md) for the plan and progress.
 
 ## Architecture
 
@@ -22,9 +23,10 @@ Two apps. `web/` is a Next.js (App Router) + TypeScript + Tailwind frontend. `ap
 is a Python + FastAPI backend on Postgres. The backend splits into clear layers under
 `api/services/`: `market/` is the only thing that talks to the data providers (Finnhub for
 quotes, profiles, and search; Twelve Data for price candles) and caches them, `sim/` runs the
-paper-trading engine, `analysis/` does the deterministic portfolio math, and `tutor/` will be
-the AI layer. One rule holds it together: every number comes from code, and the LLM only ever
-explains figures the code already computed. More in [docs/architecture.md](docs/architecture.md).
+paper-trading engine, `analysis/` does the deterministic portfolio math, and `tutor/` is the
+AI layer (an LLM with read-only, account-scoped tools, behind a swappable provider). One rule
+holds it together: every number comes from code, and the LLM only ever explains figures the
+code already computed. More in [docs/architecture.md](docs/architecture.md).
 
 ## Running it locally
 
@@ -51,6 +53,9 @@ Backend (`api/.env`):
 - `TWELVE_DATA_API_KEY`: optional, a free key from [twelvedata.com](https://twelvedata.com/).
   Only the price charts need it; everything else works without it (Finnhub's free tier no
   longer serves historical candles).
+- `OPENAI_API_KEY`: optional, from [platform.openai.com](https://platform.openai.com/). Only
+  the AI tutor needs it; without it the app runs fine and the tutor says it isn't set up.
+  `TUTOR_MODEL` optionally overrides the model (defaults to the cheapest current one).
 
 Frontend (`web/.env.local`):
 

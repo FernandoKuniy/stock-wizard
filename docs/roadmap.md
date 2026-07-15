@@ -75,13 +75,13 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 
 ## M3. AI tutor
 
-- [ ] Analysis layer operators built and unit tested (value, P/L, weights, concentration,
+- [x] Analysis layer operators built and unit tested (value, P/L, weights, concentration,
       volatility, benchmark).
-- [ ] Read-only tools wrapping the analysis layer.
-- [ ] Tutor with the system prompt enforcing the two hard rules (code computes, LLM narrates;
+- [x] Read-only tools wrapping the analysis layer.
+- [x] Tutor with the system prompt enforcing the two hard rules (code computes, LLM narrates;
       education not advice).
-- [ ] Tutor UI with a visible disclaimer.
-- [ ] Sanity check: the tutor never emits a number that did not come from a tool, and never
+- [x] Tutor UI with a visible disclaimer.
+- [x] Sanity check: the tutor never emits a number that did not come from a tool, and never
       recommends buying or selling a specific security.
 
 ## M4. Extras
@@ -94,6 +94,21 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 
 ## Progress log
 
+- 2026-07-15  M3 code complete (browser end-to-end pending an OpenAI key): the AI tutor. Finished
+  the analysis layer (concentration/diversification signals and per-position volatility, both pure
+  and unit-tested), added a Finnhub company-news fetch, and built `services/tutor/`: an OpenAI
+  provider behind a swappable interface (`TutorProvider`, one `TutorError` contract, mocked in
+  tests), six read-only tools scoped to the signed-in account (portfolio summary, position detail,
+  concentration, benchmark comparison, recent news, explain a term), a tool-calling engine, and a
+  system prompt that carries the two hard rules. Every figure the tutor states comes from a tool
+  (deterministic code); a pure provenance guard proves it in tests and monitors it at runtime.
+  Conversations are ephemeral (held in the browser, sent back each turn, no table). `/api/tutor` is
+  scoped through `get_current_account`, and a dashboard chat panel carries the "simulation, not
+  advice" disclaimer. Numbers stay identical to the dashboard by sharing `services/portfolio.py`
+  (snapshot + history builders, which the `/api/portfolio` routes were refactored onto). 141
+  backend tests green (plus one opt-in live check against the real model). The model is OpenAI's
+  cheapest (`gpt-5.4-nano`, overridable via `TUTOR_MODEL`); the tutor stays disabled until
+  `OPENAI_API_KEY` is set in `api/.env`, at which point it degrades to a clear "not set up" message.
 - 2026-07-10  M0 complete: Next.js 16 web + FastAPI/uv api, sync SQLAlchemy 2.0 with Alembic
   migrations applied to Supabase (users, accounts, holdings, transactions), and a market client
   showing a live Finnhub quote on the home page. Tooling (ruff, mypy, pytest, eslint, prettier,

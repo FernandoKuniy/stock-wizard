@@ -110,7 +110,9 @@ All external data calls and all caching live here. Nothing else touches a provid
   limit to be aware of before anyone widens the demo portfolio.
 - Company profile and symbol search: from Finnhub. The profile drives a plain-language,
   code-composed "what is this company" blurb (no LLM). Cache profiles for a long time.
-- News: recent articles per symbol (later). Cache for minutes.
+- News: recent articles per symbol, from Finnhub's company-news endpoint, cached for ten
+  minutes. The tutor's `get_recent_news` tool uses it to answer "why did this move?"; only a
+  symbol the user actually asks about is fetched, so it stays well under the 60/min tier.
 
 Both providers sit behind one `MarketError` contract, so no raw provider error reaches the
 user and swapping a provider stays a market-layer change.
@@ -146,21 +148,24 @@ framework code so it is easy to unit test.
 This is the source of truth for every figure the UI or the AI shows. All deterministic
 Python. No LLM anywhere near it.
 
-Built and unit-tested so far, in `portfolio.py` and `history.py`:
+Built and unit-tested, in `portfolio.py`, `history.py`, and `risk.py`:
 
 - Total portfolio value = cash + sum(quantity * current price).
 - Total and per-position profit/loss, absolute and percent.
 - Position weights (each holding as a percent of the portfolio).
 - Portfolio value over time, and the benchmark comparison vs SPY (see below).
-
-Still to build, with the tutor in M3:
-
-- Concentration and diversification signals (e.g. top holding weight, number of positions,
-  sector spread using Finnhub sector data).
-- Simple volatility from historical candles.
+- Concentration and diversification signals (`risk.py`): number of positions, the biggest
+  holding's weight, an "effective number of holdings" from the Herfindahl index (how many
+  equally sized bets the portfolio behaves like), and a sector breakdown from Finnhub's
+  industry field. Measured across the holdings, with cash reported separately.
+- Simple volatility (`risk.py`): the annualized standard deviation of a symbol's daily
+  returns from its candles.
 
 Every function takes plain data in and returns plain numbers out, with clear names so the
-tutor can reference them by name.
+tutor can reference them by name. Composing an account's rows plus live market data into these
+figures (fetching quotes, valuing unpriced holdings at cost, rebuilding the history series)
+lives one level up, in `services/portfolio.py`, which both the dashboard routes and the tutor
+tools call so their numbers are identical.
 
 ### Portfolio history and the benchmark (`history.py`)
 
@@ -192,27 +197,43 @@ large loss the user never took.
 ## AI tutor layer (`services/tutor/`) — the "words"
 
 An LLM with read-only tool-calling. The tools are thin wrappers over the analysis layer, so
-the model can ask for figures but can never compute them itself.
+the model can ask for figures but can never compute them itself. Built in M3.
 
-- Tools (all read-only): get_portfolio_summary, get_position_detail, get_concentration,
-  get_benchmark_comparison, get_recent_news, explain_term. Each returns code-computed data.
-- System prompt encodes the two hard rules from CLAUDE.md: numbers come from the tools not
-  the model, and this is education not advice. It teaches, explains tradeoffs, and answers
-  "what does this mean for me" using the user's real figures. It never says buy or sell a
+- **Provider (`provider.py`)**: the model sits behind a `TutorProvider` interface, the same
+  pattern as the market client (a Protocol for the slice we use, one `TutorError` contract, an
+  `lru_cache` factory, mocked in tests). The concrete provider wraps OpenAI's chat completions
+  with tool calling; the engine only ever sees neutral message/tool types, so swapping the
+  model or the whole provider is a change inside this one file. Model choice is a config value
+  (`TUTOR_MODEL`, defaulting to OpenAI's cheapest), never baked into the code.
+- **Tools (`tools.py`, all read-only)**: get_portfolio_summary, get_position_detail,
+  get_concentration, get_benchmark_comparison, get_recent_news, explain_term. Each is bound to
+  one account and reads only that account's money (the same `get_current_account` scoping every
+  route uses), and returns code-computed figures via the analysis layer and the shared
+  `services/portfolio.py` builders. `explain_term` reads a small server-side glossary that
+  mirrors the frontend one.
+- **Engine (`engine.py`)**: offers the model the tools, runs any it calls, feeds the results
+  back, and repeats until it answers in prose, with a hard cap on tool rounds.
+- **System prompt (`prompt.py`)** encodes the two hard rules from CLAUDE.md: numbers come from
+  the tools not the model, and this is education not advice. It never says buy or sell a
   specific security.
-- Keep a short disclaimer visible in the tutor UI.
-- Provenance: when the tutor cites a number, it should be a number a tool returned.
+- **Provenance guard (`guard.py`)**: a pure function that, given the answer and everything the
+  tools returned, flags any number the tutor stated that no tool produced (allowing for the
+  model rounding a figure for display). It is the enforceable form of hard rule #1: the tests
+  assert it holds over controlled tool output, and at runtime it logs violations rather than
+  mangling wording (the tools plus the prompt are the enforcement; the guard watches it hold).
+- **UI**: a dashboard chat panel keeps a short "simulation, not financial advice" disclaimer
+  visible. The conversation is ephemeral: the thread lives in the browser and is sent back each
+  turn, so nothing is stored server-side (no table, matching the stateless completion API).
 
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
 
-Model choice is swappable. Start with whatever you have easy API access to and keep the
-tutor behind an interface so the provider is not baked in.
-
 ## Secrets and config
 
-- `FINNHUB_API_KEY`, `DATABASE_URL`, and the LLM API key live in `api/.env`, gitignored.
+- `FINNHUB_API_KEY`, `DATABASE_URL`, and `OPENAI_API_KEY` (the tutor's LLM) live in `api/.env`,
+  gitignored. `OPENAI_API_KEY` is optional: without it the app still runs and the tutor endpoint
+  reports that it isn't set up. `TUTOR_MODEL` optionally overrides the tutor's model.
 - `SUPABASE_URL` (api) and `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
   (web) are public, not secrets: they locate the project and let a caller start an auth flow.
   The publishable key is safe in the browser. The secret key never goes near the frontend.

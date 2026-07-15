@@ -149,3 +149,14 @@ export const getCandles = (symbol: string, token: Token) =>
 
 export const placeOrder = (order: OrderInput, token: Token) =>
   request<OrderResult>("/api/orders", token, { method: "POST", body: JSON.stringify(order) });
+
+// The tutor is stateless server-side: the whole thread lives in the browser and is sent back
+// each turn. Numbers in the reply are computed by the backend's tools, never by the model.
+export type TutorMessage = { role: "user" | "assistant"; content: string };
+export type TutorReply = { reply: string };
+
+export const askTutor = (messages: TutorMessage[], token: Token) =>
+  request<TutorReply>("/api/tutor", token, {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });

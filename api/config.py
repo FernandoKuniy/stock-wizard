@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Twelve Data serves the historical candles Finnhub's free tier no longer does.
     # Optional: the app still runs without it; only the price charts need it.
     twelve_data_api_key: str | None = None
+    # The AI tutor's model, reached through the OpenAI API. Optional: the app still runs
+    # without a key, and the tutor endpoint says so plainly. The provider lives behind an
+    # interface (services/tutor), so the model is a config value, never baked into code.
+    openai_api_key: str | None = None
+    tutor_model: str = "gpt-5.4-nano"
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.

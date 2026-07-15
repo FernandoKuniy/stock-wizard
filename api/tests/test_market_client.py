@@ -161,3 +161,60 @@ def test_unknown_profile_raises_market_error() -> None:
     client = _client_with(httpx.MockTransport(handler))
     with pytest.raises(MarketError):
         client.get_profile("NOPE")
+
+
+def _article(ts: int, headline: str, source: str = "AP") -> dict[str, object]:
+    return {
+        "datetime": ts,
+        "headline": headline,
+        "summary": "s",
+        "source": source,
+        "url": "http://x",
+    }
+
+
+def _news_payload() -> list[dict[str, object]]:
+    return [
+        _article(1_700_000_000, "Older headline"),
+        _article(1_700_100_000, "Newer headline", source="Reuters"),
+        _article(1_700_050_000, ""),  # no headline, should be skipped
+    ]
+
+
+def test_company_news_parses_newest_first_and_skips_headline_less() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["symbol"] == "AAPL"
+        assert "from" in request.url.params and "to" in request.url.params
+        return httpx.Response(200, json=_news_payload())
+
+    client = _client_with(httpx.MockTransport(handler))
+    news = client.get_company_news("aapl")
+
+    assert [n.headline for n in news] == ["Newer headline", "Older headline"]
+    assert news[0].source == "Reuters"
+    assert news[0].date == "2023-11-16"  # unix 1_700_100_000 in UTC
+
+
+def test_company_news_caps_and_caches() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        many = [_article(1_700_000_000 + i, f"h{i}") for i in range(20)]
+        return httpx.Response(200, json=many)
+
+    client = _client_with(httpx.MockTransport(handler))
+    first = client.get_company_news("AAPL")
+    client.get_company_news("AAPL")
+
+    assert len(first) == 6  # MAX_NEWS_ITEMS
+    assert calls == 1  # second read served from cache
+
+
+def test_company_news_handles_a_non_list_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"error": "no access"})
+
+    client = _client_with(httpx.MockTransport(handler))
+    assert client.get_company_news("AAPL") == []

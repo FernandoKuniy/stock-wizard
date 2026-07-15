@@ -133,3 +133,21 @@ class TransactionOut(BaseModel):
 class OrderResultOut(BaseModel):
     transaction: TransactionOut
     cash: float
+
+
+class TutorMessage(BaseModel):
+    """One turn of the tutor conversation. The thread lives on the client and is sent back each
+    time, so the tutor is stateless here: no thread is stored server-side."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class TutorRequest(BaseModel):
+    """The conversation so far, ending with the user's latest question."""
+
+    messages: list[TutorMessage]
+
+
+class TutorReplyOut(BaseModel):
+    reply: str

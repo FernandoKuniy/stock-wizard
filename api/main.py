@@ -36,24 +36,11 @@ from schemas import (
     StockOut,
     SymbolMatchOut,
     TransactionOut,
+    TutorReplyOut,
+    TutorRequest,
 )
-from services.analysis.history import (
-    Trade,
-    ValuePoint,
-    benchmark_series,
-    compare_to_benchmark,
-    portfolio_value_series,
-)
-from services.analysis.portfolio import (
-    Position,
-    portfolio_total_value,
-    position_cost_basis,
-    position_gain_loss,
-    position_market_value,
-    position_weights,
-    total_gain_loss,
-)
-from services.market.candles import CandleClient, Candles, get_candle_client
+from services.analysis.history import ValuePoint
+from services.market.candles import CandleClient, get_candle_client
 from services.market.client import (
     CompanyProfile,
     MarketClient,
@@ -61,15 +48,17 @@ from services.market.client import (
     Quote,
     get_market_client,
 )
+from services.portfolio import HoldingView, MissingHistory, build_history, build_snapshot
 from services.sim.engine import SimError, buy, reset, sell
+from services.tutor.engine import Turn, run_tutor
+from services.tutor.provider import TutorError, TutorProvider, get_tutor_provider
+from services.tutor.tools import build_tools
 
 app = FastAPI(title="Stock Wizard API")
 
 # The index we measure everyone against. SPY tracks the S&P 500, and it is just another
 # symbol as far as the market layer is concerned.
 BENCHMARK_SYMBOL = "SPY"
-# About two years of daily bars, which is the whole cached window (see candles.py).
-HISTORY_OUTPUTSIZE = 500
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,6 +74,11 @@ MarketDep = Annotated[MarketClient, Depends(get_market_client)]
 CandleDep = Annotated[CandleClient, Depends(get_candle_client)]
 SessionDep = Annotated[Session, Depends(get_db)]
 AccountDep = Annotated[Account, Depends(get_current_account)]
+# None when no OpenAI key is configured; the tutor route says so plainly rather than crashing.
+TutorDep = Annotated[TutorProvider | None, Depends(get_tutor_provider)]
+
+# Keep the sent-back conversation bounded so a runaway client can't drive up cost.
+MAX_TUTOR_MESSAGES = 20
 
 # The market-data routes don't touch anyone's account, but they do spend our Finnhub
 # and Twelve Data quota, so they're for signed-in users only. Everything under /api
@@ -154,44 +148,18 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
             select(Holding).where(Holding.account_id == account.id).order_by(Holding.symbol)
         )
     )
-
-    quoted: dict[str, Decimal] = {}
-    unpriced: list[str] = []
-    for holding in holdings:
-        try:
-            quoted[holding.symbol] = Decimal(str(market.get_quote(holding.symbol).price))
-        except MarketError:
-            unpriced.append(holding.symbol)
-
-    # A holding we couldn't get a quote for is carried in the totals at what it cost.
-    # Leaving it out instead would shrink the portfolio by the whole position, so one
-    # flaky Finnhub call would show up as a loss the user never actually took.
-    for_totals = dict(quoted)
-    for holding in holdings:
-        if holding.symbol in unpriced:
-            for_totals[holding.symbol] = holding.avg_cost
-
-    positions = [Position(h.symbol, h.quantity, h.avg_cost) for h in holdings]
-    cash = account.cash_balance
-    total_value = portfolio_total_value(cash, positions, for_totals)
-    gain_loss = total_gain_loss(cash, account.starting_balance, positions, for_totals)
-    weights = position_weights(cash, positions, for_totals)
-
-    total_cost_basis = Decimal(0)
-    for holding in holdings:
-        total_cost_basis += position_cost_basis(holding.quantity, holding.avg_cost)
-    cash_weight = cash / total_value * Decimal(100) if total_value > 0 else Decimal(0)
+    snapshot = build_snapshot(holdings, account.cash_balance, account.starting_balance, market)
 
     return PortfolioOut(
-        cash=_round2(cash),
-        starting_balance=_round2(account.starting_balance),
-        total_value=_round2(total_value),
-        total_cost_basis=_round2(total_cost_basis),
-        total_gain_loss=_round2(gain_loss.absolute),
-        total_gain_loss_percent=_round2(gain_loss.percent),
-        cash_weight=_round2(cash_weight),
-        holdings=[_holding_out(h, quoted, weights) for h in holdings],
-        unpriced_symbols=unpriced,
+        cash=_round2(snapshot.cash),
+        starting_balance=_round2(snapshot.starting_balance),
+        total_value=_round2(snapshot.total_value),
+        total_cost_basis=_round2(snapshot.total_cost_basis),
+        total_gain_loss=_round2(snapshot.total_gain_loss),
+        total_gain_loss_percent=_round2(snapshot.total_gain_loss_percent),
+        cash_weight=_round2(snapshot.cash_weight),
+        holdings=[_holding_out(h) for h in snapshot.holdings],
+        unpriced_symbols=snapshot.unpriced_symbols,
     )
 
 
@@ -211,55 +179,34 @@ def read_portfolio_history(
             .order_by(Transaction.timestamp)
         )
     )
-    trades = [
-        Trade(
-            symbol=row.symbol,
-            side=row.side,
-            quantity=row.quantity,
-            price=row.price,
-            on=row.timestamp.date(),
-        )
-        for row in rows
-    ]
-
-    # Every symbol the account has ever touched, not just what it holds now: a stock sold
-    # last month still has to be priced on the days it was held.
-    closes: dict[str, dict[date, Decimal]] = {}
-    for symbol in sorted({trade.symbol for trade in trades}):
-        try:
-            closes[symbol] = _closes(candles.get_candles(symbol, outputsize=HISTORY_OUTPUTSIZE))
-        except MarketError as exc:
-            # Without this symbol's prices the whole line would be wrong, and a wrong chart
-            # about someone's money is worse than no chart. Say so instead of drawing it.
-            raise HTTPException(
-                status_code=502, detail="Couldn't load your performance history right now."
-            ) from exc
-
     try:
-        benchmark_closes = _closes(
-            candles.get_candles(BENCHMARK_SYMBOL, outputsize=HISTORY_OUTPUTSIZE)
+        history = build_history(
+            rows,
+            candles,
+            opened_on=account.created_at.date(),
+            starting_balance=account.starting_balance,
+            benchmark_symbol=BENCHMARK_SYMBOL,
         )
-    except MarketError:
-        benchmark_closes = {}  # the user's own line is still correct; we just can't compare
+    except MissingHistory as exc:
+        # Without a held symbol's prices the whole line would be wrong, and a wrong chart
+        # about someone's money is worse than no chart. Say so instead of drawing it.
+        raise HTTPException(
+            status_code=502, detail="Couldn't load your performance history right now."
+        ) from exc
 
-    opened_on = account.created_at.date()
-    dates = _trading_days(opened_on, benchmark_closes, closes)
-
-    portfolio = portfolio_value_series(account.starting_balance, trades, closes, dates)
-    benchmark = benchmark_series(account.starting_balance, benchmark_closes, dates)
-    comparison = compare_to_benchmark(account.starting_balance, portfolio, benchmark)
-    by_date: dict[date, ValuePoint] = {point.on: point for point in benchmark}
+    by_date: dict[date, ValuePoint] = {point.on: point for point in history.benchmark}
+    comparison = history.comparison
 
     return PortfolioHistoryOut(
         starting_balance=_round2(account.starting_balance),
-        benchmark_symbol=BENCHMARK_SYMBOL if benchmark else None,
+        benchmark_symbol=history.benchmark_symbol,
         points=[
             HistoryPointOut(
                 date=point.on.isoformat(),
                 portfolio=_round2(point.value),
                 benchmark=_round2(by_date[point.on].value) if point.on in by_date else None,
             )
-            for point in portfolio
+            for point in history.portfolio
         ],
         comparison=(
             BenchmarkComparisonOut(
@@ -312,27 +259,42 @@ def reset_account(account: AccountDep, session: SessionDep, market: MarketDep) -
     return read_portfolio(account, session, market)
 
 
-def _closes(candles: Candles) -> dict[date, Decimal]:
-    """A symbol's daily closes, keyed by day, as exact Decimals for the analysis layer."""
-    return {date.fromisoformat(point.date): Decimal(str(point.close)) for point in candles.points}
+@app.post("/api/tutor")
+def ask_tutor(
+    body: TutorRequest,
+    account: AccountDep,
+    session: SessionDep,
+    market: MarketDep,
+    candles: CandleDep,
+    provider: TutorDep,
+) -> TutorReplyOut:
+    """Ask the AI tutor about your own portfolio.
 
-
-def _trading_days(
-    opened_on: date,
-    benchmark_closes: dict[date, Decimal],
-    closes: dict[str, dict[date, Decimal]],
-) -> list[date]:
-    """The days the chart has a point for: every market day since the account opened.
-
-    The index's own trading days are the natural calendar, since it trades whenever the
-    US market is open. If we couldn't fetch it, fall back to the days the held symbols
-    traded, and failing even that, to the single day the account opened.
+    The tutor reads only this account's money, through read-only tools scoped here to
+    ``account``. Every figure it quotes comes from those tools (deterministic code), never
+    from the model, and it teaches rather than advising. See services/tutor.
     """
-    if benchmark_closes:
-        days = sorted(day for day in benchmark_closes if day >= opened_on)
-    else:
-        days = sorted({day for bars in closes.values() for day in bars if day >= opened_on})
-    return days or [opened_on]
+    if provider is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The tutor isn't set up yet.",
+        )
+    if not body.messages or body.messages[-1].role != "user":
+        raise HTTPException(
+            status_code=400,
+            detail="Send at least one message, ending with your question.",
+        )
+
+    conversation = [
+        Turn(role=message.role, content=message.content)
+        for message in body.messages[-MAX_TUTOR_MESSAGES:]
+    ]
+    tools = build_tools(session, account, market, candles, benchmark_symbol=BENCHMARK_SYMBOL)
+    try:
+        answer = run_tutor(provider, tools, conversation)
+    except (MarketError, TutorError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return TutorReplyOut(reply=answer.reply)
 
 
 def _execute_order(
@@ -347,34 +309,20 @@ def _execute_order(
     return sell(session, account, body.symbol, amount=body.value, market=market)
 
 
-def _holding_out(
-    holding: Holding, prices: dict[str, Decimal], weights: dict[str, Decimal]
-) -> HoldingOut:
-    cost_basis = position_cost_basis(holding.quantity, holding.avg_cost)
-    price = prices.get(holding.symbol)
-    if price is None:
-        return HoldingOut(
-            symbol=holding.symbol,
-            quantity=_shares(holding.quantity),
-            avg_cost=_round2(holding.avg_cost),
-            cost_basis=_round2(cost_basis),
-            price=None,
-            market_value=None,
-            gain_loss=None,
-            gain_loss_percent=None,
-            weight=None,
-        )
-    gain_loss = position_gain_loss(holding.quantity, holding.avg_cost, price)
+def _holding_out(view: HoldingView) -> HoldingOut:
+    """Round a computed holding for display. ``None`` price-derived fields stay ``None``."""
     return HoldingOut(
-        symbol=holding.symbol,
-        quantity=_shares(holding.quantity),
-        avg_cost=_round2(holding.avg_cost),
-        cost_basis=_round2(cost_basis),
-        price=_round2(price),
-        market_value=_round2(position_market_value(holding.quantity, price)),
-        gain_loss=_round2(gain_loss.absolute),
-        gain_loss_percent=_round2(gain_loss.percent),
-        weight=_round2(weights.get(holding.symbol, Decimal(0))),
+        symbol=view.symbol,
+        quantity=_shares(view.quantity),
+        avg_cost=_round2(view.avg_cost),
+        cost_basis=_round2(view.cost_basis),
+        price=_round2(view.price) if view.price is not None else None,
+        market_value=_round2(view.market_value) if view.market_value is not None else None,
+        gain_loss=_round2(view.gain_loss) if view.gain_loss is not None else None,
+        gain_loss_percent=(
+            _round2(view.gain_loss_percent) if view.gain_loss_percent is not None else None
+        ),
+        weight=_round2(view.weight) if view.weight is not None else None,
     )
 
 

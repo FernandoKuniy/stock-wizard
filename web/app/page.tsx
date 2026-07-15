@@ -6,6 +6,7 @@ import { HoldingsTable } from "@/components/HoldingsTable";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
+import { Tutor } from "@/components/Tutor";
 import {
   getPortfolio,
   getPortfolioHistory,
@@ -92,6 +93,8 @@ export default async function Home() {
             </p>
           </div>
         )}
+
+        <Tutor />
 
         <div>
           <Link href="/transactions" className="text-sm text-zinc-500 hover:underline">
