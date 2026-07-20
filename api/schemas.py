@@ -15,12 +15,19 @@ from pydantic import BaseModel
 
 
 class OrderRequest(BaseModel):
-    """A buy or sell, sized by share quantity ("shares") or dollars ("dollars")."""
+    """A buy or sell, sized by share quantity ("shares") or dollars ("dollars").
+
+    A ``market`` order fills right away at the latest quote. A ``limit`` order needs a
+    ``limit_price`` and rests until the market reaches it, so it comes back as a resting
+    order rather than a completed trade.
+    """
 
     symbol: str
     side: Literal["buy", "sell"]
     mode: Literal["shares", "dollars"]
     value: Decimal
+    type: Literal["market", "limit"] = "market"
+    limit_price: Decimal | None = None
 
 
 class QuoteOut(BaseModel):
@@ -141,8 +148,31 @@ class TransactionOut(BaseModel):
     timestamp: datetime
 
 
+class OrderOut(BaseModel):
+    """A limit order: the price it's waiting for, and how it ended up.
+
+    ``cancel_reason`` is set only when we cancelled it on the user's behalf (the cash or the
+    shares were gone by the time the price arrived), so the UI can explain rather than just
+    show a status.
+    """
+
+    id: int
+    symbol: str
+    side: str
+    quantity: float
+    limit_price: float
+    status: str
+    created_at: datetime
+    resolved_at: datetime | None
+    cancel_reason: str | None
+
+
 class OrderResultOut(BaseModel):
-    transaction: TransactionOut
+    """What came of placing an order. A market order fills immediately and comes back as a
+    ``transaction``; a limit order rests and comes back as an ``order``. Exactly one is set."""
+
+    transaction: TransactionOut | None = None
+    order: OrderOut | None = None
     cash: float
 
 

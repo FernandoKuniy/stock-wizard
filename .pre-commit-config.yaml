@@ -40,7 +40,7 @@ repos:
     hooks:
       - id: prettier
         name: prettier (web)
-        entry: web/node_modules/.bin/prettier --write --ignore-unknown
+        entry: bash scripts/pre-commit-prettier.sh
         language: system
         files: ^web/
         exclude: ^web/pnpm-lock\.yaml$

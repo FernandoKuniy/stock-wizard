@@ -3,15 +3,18 @@ import Link from "next/link";
 import { AllocationChart } from "@/components/AllocationChart";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
+import { OpenOrders } from "@/components/OpenOrders";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
 import { Tutor } from "@/components/Tutor";
 import { Watchlist } from "@/components/Watchlist";
 import {
+  getOrders,
   getPortfolio,
   getPortfolioHistory,
   getWatchlist,
+  type Order,
   type Portfolio,
   type PortfolioHistory,
   type WatchlistItem,
@@ -45,6 +48,15 @@ export default async function Home() {
     history = await getPortfolioHistory(token);
   } catch {
     history = null;
+  }
+
+  // The portfolio call above already settled any limit order whose price arrived, so this
+  // just reads the result. Sequential on purpose: two sweeps at once would be wasted work.
+  let orders: Order[] = [];
+  try {
+    orders = await getOrders(token);
+  } catch {
+    orders = [];
   }
 
   // The watchlist is a side panel, not the point of the page, so a failure here just hides
@@ -105,6 +117,8 @@ export default async function Home() {
             </p>
           </div>
         )}
+
+        {orders.length > 0 && <OpenOrders orders={orders} />}
 
         {watchlist.length > 0 && (
           <>

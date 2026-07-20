@@ -36,8 +36,13 @@ GLOSSARY: dict[str, str] = {
         "The short code a stock trades under. Apple is AAPL, Microsoft is MSFT. It's just a name."
     ),
     "market order": (
-        "Buy or sell right now, at whatever the price currently is. It's the simplest kind of "
-        "order, and it's the only kind this app does for now."
+        "Buy or sell right now, at whatever the price currently is. The simplest kind of order: "
+        "it happens straight away, but you take whatever price the market is at."
+    ),
+    "limit order": (
+        "You name your price and wait. A limit buy only goes through if the price drops to your "
+        "number; a limit sell only if it rises to it. You never pay more than you meant to, but "
+        "it might never happen at all."
     ),
     "fractional shares": (
         "You don't have to buy a whole share. If a share costs $500 and you put in $50, you get a "

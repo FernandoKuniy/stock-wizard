@@ -208,6 +208,8 @@ def test_health_needs_no_token(anon_client: TestClient) -> None:
         ("get", "/api/watchlist"),
         ("post", "/api/watchlist"),
         ("delete", "/api/watchlist/AAPL"),
+        ("get", "/api/orders"),
+        ("delete", "/api/orders/1"),
     ],
 )
 def test_account_routes_require_a_token(anon_client: TestClient, method: str, path: str) -> None:
@@ -479,6 +481,95 @@ def test_one_users_tutor_never_sees_anothers_money(
     body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
     assert client.post("/api/tutor", json=body).status_code == 200
     assert sams_client.post("/api/tutor", json=body).status_code == 200
+
+
+def _limit(symbol: str, side: str, value: float, limit_price: float) -> dict[str, Any]:
+    return {
+        "symbol": symbol,
+        "side": side,
+        "mode": "shares",
+        "value": value,
+        "type": "limit",
+        "limit_price": limit_price,
+    }
+
+
+def test_a_limit_order_rests_without_moving_any_money(client: TestClient) -> None:
+    # AAPL is 150, so a buy at 100 is still waiting.
+    placed = client.post("/api/orders", json=_limit("AAPL", "buy", 10, 100))
+    assert placed.status_code == 200, placed.text
+    body = placed.json()
+
+    # A limit order comes back as a resting order, not as a completed trade.
+    assert body["transaction"] is None
+    assert body["order"]["status"] == "open"
+    assert body["order"]["limit_price"] == 100.0
+    assert body["cash"] == 100000.0
+    assert client.get("/api/portfolio").json()["holdings"] == []
+
+
+def test_a_limit_order_needs_a_limit_price(client: TestClient) -> None:
+    body = {"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 1, "type": "limit"}
+    assert client.post("/api/orders", json=body).status_code == 400
+
+
+def test_loading_your_orders_fills_one_whose_price_arrived(client: TestClient) -> None:
+    # AAPL is 150, so a buy limit at 200 has already been reached.
+    client.post("/api/orders", json=_limit("AAPL", "buy", 10, 200))
+
+    orders = client.get("/api/orders").json()
+
+    assert orders[0]["status"] == "filled"
+    # Filled at the limit, not at the 150 we happened to see.
+    portfolio = client.get("/api/portfolio").json()
+    assert portfolio["cash"] == 98000.0  # 10 shares at the 200 limit
+    assert portfolio["holdings"][0]["avg_cost"] == 200.0
+
+
+def test_loading_your_portfolio_fills_one_whose_price_arrived(client: TestClient) -> None:
+    client.post("/api/orders", json=_limit("AAPL", "buy", 10, 200))
+
+    # The dashboard is the other place orders get checked, since that's where people look.
+    portfolio = client.get("/api/portfolio").json()
+
+    assert portfolio["holdings"][0]["symbol"] == "AAPL"
+    assert portfolio["holdings"][0]["quantity"] == 10.0
+
+
+def test_cancelling_a_limit_order(client: TestClient) -> None:
+    order = client.post("/api/orders", json=_limit("AAPL", "buy", 10, 100)).json()["order"]
+
+    cancelled = client.delete(f"/api/orders/{order['id']}")
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    # Cancelling twice is an error, not a silent no-op.
+    assert client.delete(f"/api/orders/{order['id']}").status_code == 400
+
+
+def test_one_user_cannot_cancel_anothers_order(client: TestClient, sams_client: TestClient) -> None:
+    order = client.post("/api/orders", json=_limit("AAPL", "buy", 10, 100)).json()["order"]
+
+    # Someone else's order is indistinguishable from one that doesn't exist.
+    assert sams_client.delete(f"/api/orders/{order['id']}").status_code == 404
+    assert sams_client.get("/api/orders").json() == []
+    assert client.get("/api/orders").json()[0]["status"] == "open"
+
+
+def test_reset_clears_orders_including_filled_ones(client: TestClient) -> None:
+    # One that fills (so it points at a transaction) and one still resting.
+    client.post("/api/orders", json=_limit("AAPL", "buy", 10, 200))
+    client.get("/api/portfolio")  # sweeps, filling the first
+    client.post("/api/orders", json=_limit("MSFT", "buy", 1, 10))
+
+    reset = client.post("/api/account/reset")
+
+    # A filled order references the trade it became, so reset has to clear orders before
+    # transactions or the foreign key would stop it.
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["cash"] == 100000.0
+    assert client.get("/api/orders").json() == []
+    assert client.get("/api/transactions").json() == []
 
 
 def test_watchlist_add_list_and_remove(client: TestClient) -> None:

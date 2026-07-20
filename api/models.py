@@ -55,6 +55,7 @@ class Account(Base):
     holdings: Mapped[list[Holding]] = relationship(back_populates="account")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
     watchlist_items: Mapped[list[WatchlistItem]] = relationship(back_populates="account")
+    orders: Mapped[list[Order]] = relationship(back_populates="account")
 
 
 class Holding(Base):
@@ -82,6 +83,40 @@ class Transaction(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")
+
+
+class Order(Base):
+    """A limit order resting until the market reaches the price the user asked for.
+
+    Nothing is set aside when an order is placed: cash moves only at fill. If the account
+    can't cover it by the time the price crosses, the order is cancelled with a reason
+    rather than partly filled. Orders are good until cancelled, and they're checked when
+    the user loads their portfolio or their orders, since this app deliberately runs no
+    background job (see services/sim/orders.py).
+    """
+
+    __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint("side in ('buy', 'sell')", name="ck_orders_side"),
+        CheckConstraint("status in ('open', 'filled', 'cancelled')", name="ck_orders_status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    side: Mapped[str] = mapped_column(String(4))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    limit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # The trade this order became, once it filled.
+    transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"), default=None)
+    # Why we cancelled it on the user's behalf, so the UI can explain rather than just say no.
+    cancel_reason: Mapped[str | None] = mapped_column(String(200), default=None)
+
+    account: Mapped[Account] = relationship(back_populates="orders")
+    transaction: Mapped[Transaction | None] = relationship()
 
 
 class WatchlistItem(Base):

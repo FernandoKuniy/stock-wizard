@@ -36,9 +36,10 @@ Simulation only, real market data, education first.
   free, real-time US quotes). Twelve Data for historical price candles, since Finnhub's free
   tier dropped them. Any provider works behind the market client, and all providers stay
   inside `services/market/`.
-- Simulation: we run our own. Market orders fill at the latest quote. No third-party
-  execution engine, which keeps it simple and multi-user native. (See architecture.md for
-  why we do not use Alpaca's paper engine per user.)
+- Simulation: we run our own. Market orders fill at the latest quote; limit orders rest and
+  are settled lazily, when a user's own page load checks them, since there is deliberately no
+  background job. No third-party execution engine, which keeps it simple and multi-user
+  native. (See architecture.md for why we do not use Alpaca's paper engine per user.)
 - AI tutor: an LLM with read-only tool-calling over the user's portfolio. The tools return
   code-computed figures; the LLM narrates. Runs on the OpenAI API (`openai` SDK) behind a
   swappable provider interface, so the model (`TUTOR_MODEL`) is a config value, not baked in.

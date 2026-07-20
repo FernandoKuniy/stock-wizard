@@ -34,6 +34,10 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
   now. The starting_balance lets us compute total return and power the reset.)
 - `holdings`: id, account_id, symbol, quantity, avg_cost. (avg_cost drives per-position P/L.)
 - `transactions`: id, account_id, symbol, side (buy/sell), quantity, price, timestamp.
+- `orders`: id, account_id, symbol, side, quantity, limit_price, status
+  (open/filled/cancelled), created_at, resolved_at, transaction_id, cancel_reason. Limit
+  orders waiting for their price. `transaction_id` links a filled one to the trade it
+  became, and `cancel_reason` records why we cancelled one on the user's behalf. Added in M4.
 - `watchlist_items`: id, account_id, symbol, created_at, with a unique constraint on
   (account_id, symbol). Symbols the account is tracking without owning. No money columns:
   a watchlist is just a list of tickers. Added in M4.
@@ -141,13 +145,51 @@ The paper-trading engine. Pure, testable functions over the database session:
 - `sell(session, account, symbol, *, quantity | amount, market)`: verify shares held, credit
   cash, reduce or remove the holding, write a transaction. A dollar-sized sell caps at the
   position.
-- `reset(session, account)`: restore the starting balance, clear holdings and transactions.
+- `reset(session, account)`: restore the starting balance, clear holdings, orders, and
+  transactions. Orders go first, since a filled one points at the trade it became. The
+  watchlist deliberately survives a reset: it is a list of things to look at, not money.
+- `fill_buy` / `fill_sell(session, account, symbol, shares, price)`: the settlement
+  primitives. Given shares and a price they move the cash, update the holding, and write the
+  transaction. Everything that can fill an order goes through them (market orders, the seed
+  backfill, and the limit sweep), so the money math lives in one place and cannot drift.
 
 Shares are held to 6 decimals and always round down, so a fill never spends more than the cash
 or dollar amount asked; money is quantized to 4 decimals. Failures are typed `SimError`s
 (insufficient funds/shares, invalid order) with user-safe messages. The functions flush but do
 not commit, so the caller owns the transaction boundary. Keep this layer free of HTTP and
 framework code so it is easy to unit test.
+
+### Limit orders and the lazy fill (`services/sim/orders.py`, M4)
+
+A limit order names a price and waits. This app deliberately runs no background job, so an
+order cannot be watched continuously; it is checked **lazily**, whenever the user loads their
+portfolio (`GET /api/portfolio`) or their orders (`GET /api/orders`). `sweep` takes every open
+order on the account, fetches a fresh quote per symbol, and settles the ones whose price has
+been reached. A buy crosses when the quote is at or below its limit, a sell at or above.
+
+The rules, which the UI states plainly rather than hiding:
+
+- **Fills happen at the limit price**, not at the quote we happened to see. The price passed
+  through the limit on its way, so that is where the order would really have executed;
+  filling at a later snapshot would pretend the user timed the move. It is also the
+  conservative choice: a fill is never better than what they asked for.
+- **Nothing is reserved at placement.** Cash moves only at fill, which keeps every existing
+  money figure (the snapshot, the totals, the analysis layer) completely untouched. An
+  account can therefore rest more buys than it can afford, and the first one to cross wins;
+  the sweep works oldest-first so the order that waited longest gets the cash. If the money
+  or the position is gone by the time the price arrives, the order is **cancelled with a
+  reason** rather than part-filled, and the UI explains why.
+- Orders are **good until cancelled** and fill **all or nothing**. There is no expiry and no
+  partial fill, both of which would be real scope for no teaching gain.
+- A symbol whose quote we cannot get is **skipped, never filled** — the same instinct that
+  makes the history refuse to draw a line it cannot price.
+- Placing a limit order costs no quote quota, since nothing is priced until it fills. A sell
+  is checked against the position up front (this sim has no shorting), while a buy is not
+  checked against cash, because the user may well fund it before the price arrives.
+
+A fill writes an ordinary `Transaction`, so the portfolio history picks limit fills up for
+free. The sweep locks the open rows for the transaction, so two concurrent loads cannot fill
+the same order twice and spend the cash twice.
 
 ## Analysis layer (`services/analysis/`) — the "numbers"
 

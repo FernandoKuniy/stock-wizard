@@ -20,7 +20,7 @@ from auth import get_current_user
 from config import get_settings
 from db import get_db
 from deps import get_current_account
-from models import Account, Holding, Transaction, WatchlistItem
+from models import Account, Holding, Order, Transaction, WatchlistItem
 from schemas import (
     BenchmarkComparisonOut,
     CandlePointOut,
@@ -29,6 +29,7 @@ from schemas import (
     HistoryPointOut,
     HoldingOut,
     NewsItemOut,
+    OrderOut,
     OrderRequest,
     OrderResultOut,
     PortfolioHistoryOut,
@@ -52,6 +53,7 @@ from services.market.client import (
     get_market_client,
 )
 from services.portfolio import HoldingView, MissingHistory, build_history, build_snapshot
+from services.sim import orders as sim_orders
 from services.sim.engine import SimError, buy, reset, sell
 from services.tutor.engine import Turn, run_tutor
 from services.tutor.provider import TutorError, TutorProvider, get_tutor_provider
@@ -171,6 +173,7 @@ def read_news(symbol: str, market: MarketDep) -> list[NewsItemOut]:
 @app.get("/api/portfolio")
 def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) -> PortfolioOut:
     """The dashboard payload: holdings, totals, and gain/loss, all computed in code."""
+    _sweep_orders(session, account, market)
     holdings = list(
         session.scalars(
             select(Holding).where(Holding.account_id == account.id).order_by(Holding.symbol)
@@ -254,7 +257,15 @@ def read_portfolio_history(
 def create_order(
     body: OrderRequest, account: AccountDep, session: SessionDep, market: MarketDep
 ) -> OrderResultOut:
-    """Place a market buy or sell, sized by shares or dollars."""
+    """Place a buy or sell, sized by shares or dollars.
+
+    A market order fills now, at the latest quote, and comes back as a transaction. A limit
+    order rests until the price arrives and comes back as an order; placing one spends no
+    quote quota, since nothing is priced until it fills.
+    """
+    if body.type == "limit":
+        return _place_limit_order(session, account, body)
+
     try:
         txn = _execute_order(session, account, body, market)
     except SimError as exc:
@@ -266,6 +277,33 @@ def create_order(
     session.commit()
     session.refresh(txn)  # populate the server-side timestamp
     return OrderResultOut(transaction=_txn_out(txn), cash=_round2(account.cash_balance))
+
+
+@app.get("/api/orders")
+def read_orders(account: AccountDep, session: SessionDep, market: MarketDep) -> list[OrderOut]:
+    """The account's limit orders, newest first, after settling any whose price has arrived."""
+    _sweep_orders(session, account, market)
+    rows = session.scalars(
+        select(Order)
+        .where(Order.account_id == account.id)
+        .order_by(Order.created_at.desc(), Order.id.desc())
+    )
+    return [_order_out(order) for order in rows]
+
+
+@app.delete("/api/orders/{order_id}")
+def cancel_order(order_id: int, account: AccountDep, session: SessionDep) -> OrderOut:
+    """Cancel one of your resting limit orders."""
+    try:
+        order = sim_orders.cancel(session, account, order_id)
+    except sim_orders.OrderNotFound as exc:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SimError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return _order_out(order)
 
 
 @app.get("/api/transactions")
@@ -386,6 +424,53 @@ def ask_tutor(
     except (MarketError, TutorError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return TutorReplyOut(reply=answer.reply)
+
+
+def _sweep_orders(session: Session, account: Account, market: MarketClient) -> None:
+    """Settle any resting limit orders whose price has arrived.
+
+    This is the app's stand-in for a background job: orders get looked at when the user
+    looks at their money. Committing inside a GET is deliberate, because a fill is a real
+    change to the account, not a read. A symbol we can't price is skipped, never filled.
+    """
+    if sim_orders.sweep(session, account, market):
+        session.commit()
+
+
+def _place_limit_order(session: Session, account: Account, body: OrderRequest) -> OrderResultOut:
+    """Rest a limit order. No quote is needed: nothing is priced until it fills."""
+    if body.limit_price is None:
+        raise HTTPException(status_code=400, detail="A limit order needs a limit price.")
+    try:
+        order = sim_orders.place(
+            session,
+            account,
+            body.symbol,
+            side=body.side,
+            limit_price=body.limit_price,
+            quantity=body.value if body.mode == "shares" else None,
+            amount=body.value if body.mode == "dollars" else None,
+        )
+    except SimError as exc:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    session.refresh(order)  # populate the server-side timestamp
+    return OrderResultOut(order=_order_out(order), cash=_round2(account.cash_balance))
+
+
+def _order_out(order: Order) -> OrderOut:
+    return OrderOut(
+        id=order.id,
+        symbol=order.symbol,
+        side=order.side,
+        quantity=_shares(order.quantity),
+        limit_price=_round2(order.limit_price),
+        status=order.status,
+        created_at=order.created_at,
+        resolved_at=order.resolved_at,
+        cancel_reason=order.cancel_reason,
+    )
 
 
 def _execute_order(

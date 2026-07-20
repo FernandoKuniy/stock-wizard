@@ -86,7 +86,7 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 
 ## M4. Extras
 
-- [ ] Limit orders (with the market-vs-limit teaching moment).
+- [x] Limit orders (with the market-vs-limit teaching moment).
 - [x] Watchlists.
 - [x] Per-stock news feed.
 - [ ] Historical "time machine" mode.

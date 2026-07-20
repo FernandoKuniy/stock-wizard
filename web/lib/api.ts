@@ -102,13 +102,35 @@ export type Transaction = {
   timestamp: string;
 };
 
-export type OrderResult = { transaction: Transaction; cash: number };
+// A limit order waiting for its price. `cancel_reason` is set only when we cancelled it on
+// the user's behalf, because the cash or the shares were gone by the time the price arrived.
+export type Order = {
+  id: number;
+  symbol: string;
+  side: string;
+  quantity: number;
+  limit_price: number;
+  status: "open" | "filled" | "cancelled";
+  created_at: string;
+  resolved_at: string | null;
+  cancel_reason: string | null;
+};
+
+// A market order fills immediately and comes back as a transaction; a limit order rests and
+// comes back as an order. Exactly one of the two is set.
+export type OrderResult = {
+  transaction: Transaction | null;
+  order: Order | null;
+  cash: number;
+};
 
 export type OrderInput = {
   symbol: string;
   side: "buy" | "sell";
   mode: "shares" | "dollars";
   value: number;
+  type?: "market" | "limit";
+  limit_price?: number;
 };
 
 async function request<T>(path: string, token: Token, init?: RequestInit): Promise<T> {
@@ -164,6 +186,13 @@ export const getNews = (symbol: string, token: Token) =>
 
 export const placeOrder = (order: OrderInput, token: Token) =>
   request<OrderResult>("/api/orders", token, { method: "POST", body: JSON.stringify(order) });
+
+// Loading this settles any resting order whose price has arrived, since the app runs no
+// background job. Same for getPortfolio.
+export const getOrders = (token: Token) => request<Order[]>("/api/orders", token);
+
+export const cancelOrder = (id: number, token: Token) =>
+  request<Order>(`/api/orders/${id}`, token, { method: "DELETE" });
 
 // The tutor is stateless server-side: the whole thread lives in the browser and is sent back
 // each turn. Numbers in the reply are computed by the backend's tools, never by the model.
