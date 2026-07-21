@@ -89,11 +89,24 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 - [x] Limit orders (with the market-vs-limit teaching moment).
 - [x] Watchlists.
 - [x] Per-stock news feed.
-- [ ] Historical "time machine" mode.
+- [x] Historical "time machine" mode (shipped as a what-if calculator; see decisions.md).
 - [ ] Achievements and streaks.
 
 ## Progress log
 
+- 2026-07-15  M4 (time machine) code complete, the fourth extra, shipped as a what-if calculator
+  rather than a replay mode (see decisions.md). A new pure `services/analysis/whatif.py` buys at
+  the real close on the first trading day on or after the start date, values it at the latest
+  close, and pairs the answer with the same money in the S&P 500 over the same window; the
+  comparison is dropped rather than drawn if the index can't be priced over that exact window.
+  `GET /api/stock/{symbol}/what-if` serves it through a `build_what_if` composer, capped at the
+  cached two-year candle window so a what-if on a stock page normally costs no provider call.
+  The stock page renders the default ($1,000, one year) with the page and refetches as the user
+  changes the amount or period, and the copy is blunt that past moves say nothing about future
+  ones. 202 backend tests green (18 new: gains, losses, closed-market start dates, exact
+  fractional shares, a stock beating and trailing the index, a missing or too-short index, a
+  symbol with no history that far back); ruff + mypy clean; web passes eslint + prettier + tsc
+  and a production build. Browser check still pending a sign-in.
 - 2026-07-15  M4 (per-stock news feed) done, verified end to end in the browser. The second
   extra, and the smallest: the Finnhub company-news fetch and its ten-minute cache already
   existed from M3, so this is a thin `GET /api/stock/{symbol}/news` route (signed-in, degrades

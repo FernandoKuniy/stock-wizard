@@ -262,6 +262,53 @@ def test_candles(client: TestClient) -> None:
     assert [p["close"] for p in points] == CHART_CLOSES["AAPL"]
 
 
+def test_what_if_answers_against_the_index(client: TestClient) -> None:
+    # AAPL ran 100 -> 150 over the window (+50%), the index 500 -> 550 (+10%).
+    body = client.get("/api/stock/AAPL/what-if", params={"amount": 1000, "period": "1m"}).json()
+
+    assert body["amount"] == 1000.0
+    assert body["stock"]["symbol"] == "AAPL"
+    assert body["stock"]["buy_price"] == 100.0
+    assert body["stock"]["value_now"] == 1500.0
+    assert body["stock"]["gain_loss"] == 500.0
+    assert body["stock"]["gain_loss_percent"] == 50.0
+
+    # The comparison is the point: the same money in the index would be $1,100.
+    assert body["benchmark"]["symbol"] == "SPY"
+    assert body["benchmark"]["value_now"] == 1100.0
+    assert body["difference"] == 400.0
+
+
+def test_what_if_still_answers_without_the_index(client: TestClient, candles: FakeCandles) -> None:
+    candles.failing.add("SPY")
+
+    body = client.get("/api/stock/AAPL/what-if", params={"amount": 1000}).json()
+
+    # Same asymmetry as the performance chart: no index costs only the comparison.
+    assert body["stock"]["value_now"] == 1500.0
+    assert body["benchmark"] is None
+    assert body["difference"] is None
+
+
+def test_what_if_needs_a_token(anon_client: TestClient) -> None:
+    assert anon_client.get("/api/stock/AAPL/what-if").status_code == 401
+
+
+def test_what_if_rejects_a_non_positive_amount(client: TestClient) -> None:
+    assert client.get("/api/stock/AAPL/what-if", params={"amount": 0}).status_code == 422
+
+
+def test_what_if_rejects_an_unknown_period(client: TestClient) -> None:
+    assert client.get("/api/stock/AAPL/what-if", params={"period": "20y"}).status_code == 422
+
+
+def test_what_if_says_so_when_the_history_is_unavailable(
+    client: TestClient, candles: FakeCandles
+) -> None:
+    candles.failing.add("AAPL")
+    assert client.get("/api/stock/AAPL/what-if").status_code == 502
+
+
 def test_stock_news_returns_recent_articles(client: TestClient) -> None:
     body = client.get("/api/stock/AAPL/news").json()
     assert [item["headline"] for item in body] == [

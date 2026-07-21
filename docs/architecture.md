@@ -196,7 +196,7 @@ the same order twice and spend the cash twice.
 This is the source of truth for every figure the UI or the AI shows. All deterministic
 Python. No LLM anywhere near it.
 
-Built and unit-tested, in `portfolio.py`, `history.py`, and `risk.py`:
+Built and unit-tested, in `portfolio.py`, `history.py`, `risk.py`, and `whatif.py`:
 
 - Total portfolio value = cash + sum(quantity * current price).
 - Total and per-position profit/loss, absolute and percent.
@@ -208,6 +208,9 @@ Built and unit-tested, in `portfolio.py`, `history.py`, and `risk.py`:
   industry field. Measured across the holdings, with cash reported separately.
 - Simple volatility (`risk.py`): the annualized standard deviation of a symbol's daily
   returns from its candles.
+- The time machine (`whatif.py`, M4): what one lump sum into a stock on a past date would be
+  worth at the latest close, always alongside the same money in the index over the same
+  window. See below.
 
 Every function takes plain data in and returns plain numbers out, with clear names so the
 tutor can reference them by name. Composing an account's rows plus live market data into these
@@ -241,6 +244,30 @@ The same principle applies on the dashboard: a holding whose live quote fails is
 the totals at what it cost and flagged in `unpriced_symbols`, rather than dropped. Dropping it
 would shrink the portfolio by the whole position, so one flaky Finnhub call would read as a
 large loss the user never took.
+
+### The time machine (`whatif.py`, M4)
+
+"What if I'd put $1,000 into this a year ago?" Buys at the real close on the first trading
+day on or after the start date (rolling forward over weekends and holidays, the same
+convention the history spine uses), values it at the latest close, and returns the shares,
+the value now, and the gain or loss. `GET /api/stock/{symbol}/what-if?amount=&period=` serves
+it, composed by `build_what_if` in `services/portfolio.py` like the other builders.
+
+Two things are deliberate:
+
+- **It always shows the index alongside.** On its own, "you'd have made $500" is the kind of
+  figure that reads as a nudge to buy, which is exactly what hard rule #2 forbids. Next to
+  the S&P 500 over the same window it becomes the lesson the product is built around, and it
+  just as often shows the single stock trailing the market. If the index can't be priced over
+  the *same* window, the comparison is dropped rather than drawn across mismatched periods.
+- **The lookback is capped at two years**, which is the candle window we already fetch and
+  cache. On a stock page the chart has just loaded those same candles, so a what-if normally
+  costs no provider call at all. Reaching further back would mean a second, longer fetch per
+  symbol and real pressure on Twelve Data's 8-calls-a-minute tier.
+
+Shares stay exact fractions here rather than rounding down to 6dp the way a real fill does:
+this is a hypothetical, not an order, so rounding would only invent a loss the user never
+took. A symbol with no history that far back returns 404 rather than a guess.
 
 ## AI tutor layer (`services/tutor/`) — the "words"
 

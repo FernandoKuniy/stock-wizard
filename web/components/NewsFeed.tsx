@@ -1,5 +1,5 @@
 import type { NewsItem } from "@/lib/api";
-import { formatNewsDate } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
 
 /**
  * Recent headlines for a stock, straight from the news provider. Just a scannable list that
@@ -14,7 +14,7 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
       <h2 className="text-sm font-medium">Recent news</h2>
       <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
         {items.map((item, i) => {
-          const date = formatNewsDate(item.date);
+          const date = formatShortDate(item.date);
           return (
             <li key={item.url || i} className="py-3 first:pt-0 last:pb-0">
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="group block">

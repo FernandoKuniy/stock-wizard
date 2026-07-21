@@ -73,6 +73,34 @@ class NewsItemOut(BaseModel):
     date: str
 
 
+class WhatIfLegOut(BaseModel):
+    """One side of a what-if: what the money bought, and what it's worth at the latest close."""
+
+    symbol: str
+    shares: float
+    bought_on: str
+    buy_price: float
+    value_now: float
+    gain_loss: float
+    gain_loss_percent: float
+
+
+class WhatIfOut(BaseModel):
+    """A lump sum into one stock, against the same money in the index over the same window.
+
+    ``benchmark`` and ``difference`` are null when the index couldn't be priced over the
+    same period, in which case the stock's own answer still stands. ``difference`` is
+    positive when the stock beat the index.
+    """
+
+    amount: float
+    period: str
+    latest_on: str
+    stock: WhatIfLegOut
+    benchmark: WhatIfLegOut | None
+    difference: float | None
+
+
 class CandlePointOut(BaseModel):
     date: str
     close: float

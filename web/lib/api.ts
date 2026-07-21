@@ -184,6 +184,42 @@ export const getCandles = (symbol: string, token: Token) =>
 export const getNews = (symbol: string, token: Token) =>
   request<NewsItem[]>(`/api/stock/${encodeURIComponent(symbol)}/news`, token);
 
+// One side of a what-if: what the money bought, and what it's worth at the latest close.
+export type WhatIfLeg = {
+  symbol: string;
+  shares: number;
+  bought_on: string;
+  buy_price: number;
+  value_now: number;
+  gain_loss: number;
+  gain_loss_percent: number;
+};
+
+export type WhatIfPeriod = "1m" | "6m" | "1y" | "2y";
+
+// `benchmark` and `difference` are null when the index couldn't be priced over the same
+// window. `difference` is positive when the stock beat the index.
+export type WhatIf = {
+  amount: number;
+  period: string;
+  latest_on: string;
+  stock: WhatIfLeg;
+  benchmark: WhatIfLeg | null;
+  difference: number | null;
+};
+
+// Served from the same cached candle window the price chart already fetched, so this
+// normally costs no provider call.
+export const getWhatIf = (
+  symbol: string,
+  token: Token,
+  { amount = 1000, period = "1y" }: { amount?: number; period?: WhatIfPeriod } = {},
+) =>
+  request<WhatIf>(
+    `/api/stock/${encodeURIComponent(symbol)}/what-if?amount=${amount}&period=${period}`,
+    token,
+  );
+
 export const placeOrder = (order: OrderInput, token: Token) =>
   request<OrderResult>("/api/orders", token, { method: "POST", body: JSON.stringify(order) });
 

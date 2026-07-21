@@ -7,11 +7,11 @@ JSON. No financial figure is computed here beyond rounding for display.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -42,8 +42,11 @@ from schemas import (
     TutorRequest,
     WatchlistAddRequest,
     WatchlistItemOut,
+    WhatIfLegOut,
+    WhatIfOut,
 )
 from services.analysis.history import ValuePoint
+from services.analysis.whatif import NotEnoughHistory, WhatIfLeg
 from services.market.candles import CandleClient, get_candle_client
 from services.market.client import (
     CompanyProfile,
@@ -52,7 +55,13 @@ from services.market.client import (
     Quote,
     get_market_client,
 )
-from services.portfolio import HoldingView, MissingHistory, build_history, build_snapshot
+from services.portfolio import (
+    HoldingView,
+    MissingHistory,
+    build_history,
+    build_snapshot,
+    build_what_if,
+)
 from services.sim import orders as sim_orders
 from services.sim.engine import SimError, buy, reset, sell
 from services.tutor.engine import Turn, run_tutor
@@ -84,6 +93,12 @@ TutorDep = Annotated[TutorProvider | None, Depends(get_tutor_provider)]
 
 # Keep the sent-back conversation bounded so a runaway client can't drive up cost.
 MAX_TUTOR_MESSAGES = 20
+
+# How far back the time machine looks, in calendar days. Capped at two years because that is
+# the candle window we already fetch and cache, so a what-if on a stock page usually costs no
+# provider call at all (see services/market/candles.py).
+WHAT_IF_DAYS = {"1m": 30, "6m": 182, "1y": 365, "2y": 730}
+WhatIfPeriod = Literal["1m", "6m", "1y", "2y"]
 
 # The market-data routes don't touch anyone's account, but they do spend our Finnhub
 # and Twelve Data quota, so they're for signed-in users only. Everything under /api
@@ -168,6 +183,42 @@ def read_news(symbol: str, market: MarketDep) -> list[NewsItemOut]:
         )
         for item in items
     ]
+
+
+@app.get("/api/stock/{symbol}/what-if", dependencies=signed_in)
+def read_what_if(
+    symbol: str,
+    candles: CandleDep,
+    amount: Annotated[Decimal, Query(gt=0, le=10_000_000)] = Decimal("1000"),
+    period: WhatIfPeriod = "1y",
+) -> WhatIfOut:
+    """The time machine: what a lump sum into this stock back then would be worth now.
+
+    Always answered next to the same money in the index, because "you'd have made $240" on
+    its own reads as a nudge to buy, while next to the S&P 500 it teaches the actual lesson.
+    Every figure is computed by ``services/analysis/whatif.py``; this route only rounds.
+    """
+    start = date.today() - timedelta(days=WHAT_IF_DAYS[period])
+    try:
+        result = build_what_if(
+            candles, symbol, amount, start=start, benchmark_symbol=BENCHMARK_SYMBOL
+        )
+    except NotEnoughHistory as exc:
+        # The stock wasn't trading that far back, so there is no honest answer to give.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MissingHistory as exc:
+        raise HTTPException(
+            status_code=502, detail="Couldn't load the price history for that just now."
+        ) from exc
+
+    return WhatIfOut(
+        amount=_round2(result.amount),
+        period=period,
+        latest_on=result.stock.latest_on.isoformat(),
+        stock=_what_if_leg_out(result.stock),
+        benchmark=(_what_if_leg_out(result.benchmark) if result.benchmark is not None else None),
+        difference=_round2(result.difference) if result.difference is not None else None,
+    )
 
 
 @app.get("/api/portfolio")
@@ -516,6 +567,18 @@ def _watchlist_out(symbol: str, quote: Quote | None) -> WatchlistItemOut:
         symbol=symbol,
         price=quote.price if quote is not None else None,
         percent_change=quote.percent_change if quote is not None else None,
+    )
+
+
+def _what_if_leg_out(leg: WhatIfLeg) -> WhatIfLegOut:
+    return WhatIfLegOut(
+        symbol=leg.symbol,
+        shares=_shares(leg.shares),
+        bought_on=leg.bought_on.isoformat(),
+        buy_price=_round2(leg.buy_price),
+        value_now=_round2(leg.value_now),
+        gain_loss=_round2(leg.gain_loss),
+        gain_loss_percent=_round2(leg.gain_loss_percent),
     )
 
 

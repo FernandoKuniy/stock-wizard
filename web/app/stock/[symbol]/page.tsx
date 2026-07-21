@@ -4,6 +4,7 @@ import { NewsFeed } from "@/components/NewsFeed";
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
 import { Term } from "@/components/Term";
+import { TimeMachine } from "@/components/TimeMachine";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import {
   getCandles,
@@ -11,9 +12,11 @@ import {
   getPortfolio,
   getStock,
   getWatchlist,
+  getWhatIf,
   type CandlePoint,
   type NewsItem,
   type Stock,
+  type WhatIf,
 } from "@/lib/api";
 import { formatCompactMoney, formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
@@ -53,6 +56,15 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     news = await getNews(upper, token);
   } catch {
     news = []; // news is a nice-to-have; hide the section rather than break the page
+  }
+
+  // Render the default what-if with the page so it's there on arrival. It reads the same
+  // cached candles the chart above just used, so it costs no provider call.
+  let whatIf: WhatIf | null = null;
+  try {
+    whatIf = await getWhatIf(upper, token);
+  } catch {
+    whatIf = null; // the component says so and still lets them try another period
   }
 
   let cash = 0;
@@ -124,6 +136,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               </div>
             </div>
           )}
+
+          <TimeMachine symbol={quote.symbol} initial={whatIf} />
 
           <NewsFeed items={news} />
         </div>

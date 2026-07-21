@@ -39,6 +39,7 @@ from services.analysis.portfolio import (
     position_weights,
     total_gain_loss,
 )
+from services.analysis.whatif import WhatIf, what_if
 from services.market.candles import Candles
 from services.market.client import MarketError, Quote
 
@@ -246,6 +247,42 @@ def build_history(
         portfolio=portfolio,
         benchmark=benchmark,
         comparison=comparison,
+    )
+
+
+def build_what_if(
+    candles: CandleProvider,
+    symbol: str,
+    amount: Decimal,
+    *,
+    start: date,
+    benchmark_symbol: str,
+    outputsize: int = HISTORY_OUTPUTSIZE,
+) -> WhatIf:
+    """What a lump sum into ``symbol`` on ``start`` would be worth now, against the index.
+
+    Reuses the same cached candle window the price chart already fetched, so asking this on
+    a stock page usually costs no provider call at all. If the index can't be loaded we
+    still answer the user's question and just drop the comparison, the same asymmetry
+    ``build_history`` uses.
+    """
+    try:
+        closes = _closes(candles.get_candles(symbol, outputsize=outputsize))
+    except MarketError as exc:
+        raise MissingHistory(symbol) from exc
+
+    try:
+        benchmark_closes = _closes(candles.get_candles(benchmark_symbol, outputsize=outputsize))
+    except MarketError:
+        benchmark_closes = {}
+
+    return what_if(
+        amount,
+        symbol.upper(),
+        closes,
+        start=start,
+        benchmark_symbol=benchmark_symbol,
+        benchmark_closes=benchmark_closes,
     )
 
 

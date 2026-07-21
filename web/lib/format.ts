@@ -41,9 +41,10 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-// A bare ISO date (YYYY-MM-DD) like a news date. Build the Date from its parts so it reads
-// as a local day, not UTC midnight, which would otherwise slip to the day before in the US.
-export function formatNewsDate(isoDate: string): string {
+// A bare ISO date (YYYY-MM-DD), like a news date or a market close. Build the Date from its
+// parts so it reads as a local day, not UTC midnight, which would otherwise slip to the day
+// before in the US.
+export function formatShortDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-").map(Number);
   if (!year || !month || !day) return "";
   return new Date(year, month - 1, day).toLocaleDateString("en-US", {
