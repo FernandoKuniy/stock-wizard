@@ -13,6 +13,10 @@ just bought the index instead?" So we take the same starting balance, put all of
 into the S&P 500 on the day the account opened, hold it, and draw that line next to
 the user's. Both lines start at exactly the starting balance, which is what makes the
 comparison honest.
+
+Looking at a shorter stretch asks the same question from a later day: what the account was
+worth when the window opened, all of it into the index on that day, held to now. Both lines
+still start at the same number, so the comparison stays honest at any period. See ``trim_to``.
 """
 
 from __future__ import annotations
@@ -133,13 +137,31 @@ def benchmark_series(
     return points
 
 
+def trim_to(points: Sequence[ValuePoint], since: date | None) -> list[ValuePoint]:
+    """The stretch of ``points`` from ``since`` onward. All of them when ``since`` is None.
+
+    The series is always rebuilt over the account's whole life first, because a trade made
+    before the window still has to be replayed to know what was held during it. Only then is
+    it trimmed to the stretch being looked at, which costs nothing: the prices were already
+    fetched and cached, so a shorter period is a slice, never another request.
+    """
+    if since is None:
+        return list(points)
+    return [point for point in points if point.on >= since]
+
+
 def compare_to_benchmark(
-    starting_balance: Decimal,
+    baseline: Decimal,
     portfolio: Sequence[ValuePoint],
     benchmark: Sequence[ValuePoint],
 ) -> BenchmarkComparison | None:
-    """Where the two lines ended up. None if either side has nothing to compare."""
-    if not portfolio or not benchmark or starting_balance <= _ZERO:
+    """Where the two lines ended up, measured from ``baseline``.
+
+    ``baseline`` is what the account was worth when the window opened: the starting balance
+    over its whole life, or its value on the first day of a shorter stretch. None if either
+    side has nothing to compare.
+    """
+    if not portfolio or not benchmark or baseline <= _ZERO:
         return None
 
     portfolio_value = portfolio[-1].value
@@ -149,8 +171,8 @@ def compare_to_benchmark(
         portfolio_value=portfolio_value,
         benchmark_value=benchmark_value,
         difference=portfolio_value - benchmark_value,
-        portfolio_percent=(portfolio_value - starting_balance) / starting_balance * _HUNDRED,
-        benchmark_percent=(benchmark_value - starting_balance) / starting_balance * _HUNDRED,
+        portfolio_percent=(portfolio_value - baseline) / baseline * _HUNDRED,
+        benchmark_percent=(benchmark_value - baseline) / baseline * _HUNDRED,
     )
 
 

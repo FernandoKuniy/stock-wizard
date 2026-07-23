@@ -62,8 +62,17 @@ export type BenchmarkComparison = {
   benchmark_percent: number;
 };
 
+// How far back the performance chart looks. Nothing shorter than a month on purpose: a
+// day-by-day view of your own money teaches trading on noise.
+export type HistoryPeriod = "1m" | "6m" | "1y" | "all";
+
+// `baseline` is where both lines start on this stretch: the starting balance over the
+// account's whole life, or what it was worth on the window's first day over a shorter one.
+// `starting_balance` is always what the account was funded with.
 export type PortfolioHistory = {
   starting_balance: number;
+  period: HistoryPeriod;
+  baseline: number;
   benchmark_symbol: string | null;
   points: HistoryPoint[];
   comparison: BenchmarkComparison | null;
@@ -179,8 +188,10 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
 
 export const getPortfolio = (token: Token) => request<Portfolio>("/api/portfolio", token);
 
-export const getPortfolioHistory = (token: Token) =>
-  request<PortfolioHistory>("/api/portfolio/history", token);
+// Switching periods costs no market-data call: the backend builds the series over the whole
+// account either way, off candles it has already cached, and slices it.
+export const getPortfolioHistory = (token: Token, period: HistoryPeriod = "all") =>
+  request<PortfolioHistory>(`/api/portfolio/history?period=${period}`, token);
 
 export const getTransactions = (token: Token) => request<Transaction[]>("/api/transactions", token);
 

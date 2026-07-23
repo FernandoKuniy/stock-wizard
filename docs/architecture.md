@@ -239,6 +239,17 @@ makes the comparison honest. The index's own trading days are the date spine, si
 whenever the US market is open; a symbol with no bar on a given day is carried at its last
 close.
 
+`GET /api/portfolio/history?period=1m|6m|1y|all` narrows it to one stretch, which is what the
+chart's period selector sends. The series is always rebuilt over the account's whole life first
+(a trade made before the window still has to be replayed to know what was held during it) and
+then trimmed by `trim_to`, off candles already fetched and cached, so **switching periods costs
+no provider call at all**. Over a shorter window the index leg is rebought at the account's
+value on the window's first day, so both lines still start at the same number and the
+comparison means "how did I do over this stretch", not "since I started". Over the whole life
+the baseline is the starting balance, exactly as before. There is deliberately **no 1D or 1W**:
+a day-by-day view of your own money teaches trading on noise, which is the habit this chart
+exists to warn about.
+
 The two failure modes get deliberately opposite treatment:
 
 - **The index is unavailable**: still draw the user's own line. It is correct on its own; we

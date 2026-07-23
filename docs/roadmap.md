@@ -100,7 +100,7 @@ and adding them to the old single page would have made the chaos worse before it
 
 - [~] Split the dashboard into Overview / Holdings / Activity, with a three-item nav.
 - [~] Dock the tutor so it's reachable from every page, not just the overview.
-- [ ] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
+- [~] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
       windows are what make people trade.
 - [ ] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
       reason. Surfaces the concentration and sector math `analysis/risk.py` already computes.

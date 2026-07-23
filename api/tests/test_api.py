@@ -445,6 +445,35 @@ def test_history_draws_the_portfolio_against_the_index(
     assert comparison["difference"] == -10000.0
 
 
+def test_history_defaults_to_the_whole_account(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+
+    body = client.get("/api/portfolio/history").json()
+
+    assert body["period"] == "all"
+    # Over the whole life the baseline is the money the account opened with.
+    assert body["baseline"] == 100000.0
+
+
+def test_history_over_a_short_window_is_a_slice(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+
+    body = client.get("/api/portfolio/history?period=1m").json()
+
+    # The fixture account is three days old, so a month is still its whole life, and the
+    # baseline stays the starting balance rather than day one's closing value.
+    assert body["period"] == "1m"
+    assert body["baseline"] == 100000.0
+    assert [point["date"] for point in body["points"]] == [d.isoformat() for d in CHART_DAYS]
+
+
+def test_history_rejects_a_period_we_do_not_serve(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+
+    # No 1D or 1W on purpose: a day-by-day view of your own money teaches trading on noise.
+    assert client.get("/api/portfolio/history?period=1d").status_code == 422
+
+
 def test_history_of_an_untouched_account_is_flat_cash(
     client: TestClient, db_session: Session
 ) -> None:

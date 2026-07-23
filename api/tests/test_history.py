@@ -15,6 +15,7 @@ from services.analysis.history import (
     benchmark_series,
     compare_to_benchmark,
     portfolio_value_series,
+    trim_to,
 )
 
 START = Decimal("100000")
@@ -198,3 +199,69 @@ def test_comparison_needs_both_lines() -> None:
     assert compare_to_benchmark(START, points, []) is None
     assert compare_to_benchmark(START, [], points) is None
     assert compare_to_benchmark(Decimal(0), points, points) is None
+
+
+def test_trim_keeps_everything_without_a_start() -> None:
+    points = portfolio_value_series(START, [], {}, DAYS)
+
+    assert trim_to(points, None) == points
+
+
+def test_trim_drops_the_days_before_the_window() -> None:
+    points = portfolio_value_series(START, [], {}, DAYS)
+
+    trimmed = trim_to(points, DAYS[2])
+
+    assert [point.on for point in trimmed] == DAYS[2:]
+
+
+def test_trim_includes_the_first_day_of_the_window() -> None:
+    points = portfolio_value_series(START, [], {}, DAYS)
+
+    # On or after, not strictly after: the day the window opens is part of it.
+    assert trim_to(points, DAYS[0])[0].on == DAYS[0]
+
+
+def test_trim_to_a_start_before_the_account_keeps_the_whole_life() -> None:
+    points = portfolio_value_series(START, [], {}, DAYS)
+
+    # Asking for a year on a five-day-old account is that account's whole life.
+    assert trim_to(points, date(2020, 1, 1)) == points
+
+
+def test_trim_past_the_end_leaves_nothing() -> None:
+    points = portfolio_value_series(START, [], {}, DAYS)
+
+    assert trim_to(points, date(2030, 1, 1)) == []
+
+
+def test_a_shorter_window_is_measured_from_where_it_opened() -> None:
+    """The point of the period selector: this month's answer, not since-you-started.
+
+    A stock that doubled in the first half and sat still in the second should read as a big
+    gain over the whole stretch and as flat over the second half.
+    """
+    trades = [Trade("AAPL", "buy", d("1000"), d("100"), DAYS[0])]
+    aapl = closes({DAYS[0]: "100", DAYS[1]: "150", DAYS[2]: "200", DAYS[3]: "200", DAYS[4]: "200"})
+    full = portfolio_value_series(START, trades, {"AAPL": aapl}, DAYS)
+
+    # Whole life: 1,000 shares bought at 100, now worth 200. Cash is unchanged at 0 left over.
+    assert full[0].value == START  # 0 cash + 1,000 shares at 100
+    assert full[-1].value == d("200000")
+
+    window = trim_to(full, DAYS[2])
+    baseline = window[0].value
+    spy = closes({DAYS[2]: "400", DAYS[3]: "400", DAYS[4]: "440"})
+    benchmark = benchmark_series(baseline, spy, [point.on for point in window])
+
+    result = compare_to_benchmark(baseline, window, benchmark)
+    assert result is not None
+
+    # Flat over the window, even though it doubled over the account's whole life.
+    assert result.portfolio_value == d("200000")
+    assert result.portfolio_percent == d("0")
+    # Both lines start at the same number, which is what keeps the comparison honest.
+    assert benchmark[0].value == baseline
+    # The index rose 10% over the same stretch, so sitting still cost $20,000 of ground.
+    assert result.benchmark_percent == d("10")
+    assert result.difference == d("-20000")

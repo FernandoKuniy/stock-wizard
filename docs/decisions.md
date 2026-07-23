@@ -6,6 +6,16 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  The performance chart's period selector **rebases each window** rather than just
+  zooming the x-axis. Over a shorter stretch the index leg is rebought at whatever the account
+  was worth on that stretch's first day, so both lines still start at the same number and "you're
+  beating the market by $310" means over *that* stretch. Slicing while keeping the day-one
+  benchmark would have put the two lines at different origins and left a headline that
+  contradicted the chart under it. The offered periods are **1M / 6M / 1Y / All only**: a 1D or
+  1W view of your own money teaches reading noise as signal, the same reasoning that cut activity
+  badges. Slicing happens **server-side** off the already-cached candle window, so switching
+  periods costs no provider call; doing it in the browser would have been free too but breaks the
+  rule that the frontend only formats and never recomputes a figure.
 - 2026-07-22  The dashboard splits into **three routes** (Overview `/`, Holdings `/holdings`,
   Activity `/activity`) instead of the single stacked page it had been through M4. One page
   doing five jobs contradicted both stated UX principles ("one screen answers how am I doing"

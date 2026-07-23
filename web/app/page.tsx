@@ -73,7 +73,7 @@ export default async function Home() {
           </p>
         )}
 
-        {history && <PerformanceChart history={history} />}
+        {history && <PerformanceChart initial={history} />}
 
         {history?.comparison && (
           <FirstTimeCallout id="benchmark" title="Why the second line matters">

@@ -177,7 +177,16 @@ class BenchmarkComparisonOut(BaseModel):
 
 
 class PortfolioHistoryOut(BaseModel):
+    """The performance chart over one stretch of time.
+
+    ``starting_balance`` is what the account was funded with, always. ``baseline`` is where
+    both lines start on *this* stretch, which is the same number over the account's whole life
+    and its value on the first day of a shorter one.
+    """
+
     starting_balance: float
+    period: str
+    baseline: float
     benchmark_symbol: str | None
     points: list[HistoryPointOut]
     comparison: BenchmarkComparisonOut | None

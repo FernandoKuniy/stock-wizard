@@ -29,6 +29,7 @@ from services.analysis.history import (
     benchmark_series,
     compare_to_benchmark,
     portfolio_value_series,
+    trim_to,
 )
 from services.analysis.portfolio import (
     Position,
@@ -187,9 +188,12 @@ class HistoryResult:
 
     ``benchmark_symbol`` is ``None`` when the index couldn't be loaded (the user's own line is
     still correct on its own). ``comparison`` is ``None`` when there is nothing to compare.
+    ``baseline`` is what the account was worth when this window opened, which is where both
+    lines start.
     """
 
     benchmark_symbol: str | None
+    baseline: Decimal
     portfolio: list[ValuePoint]
     benchmark: list[ValuePoint]
     comparison: BenchmarkComparison | None
@@ -202,6 +206,7 @@ def build_history(
     opened_on: date,
     starting_balance: Decimal,
     benchmark_symbol: str,
+    since: date | None = None,
     outputsize: int = HISTORY_OUTPUTSIZE,
 ) -> HistoryResult:
     """Rebuild what an account has been worth over time, against the same money left in the index.
@@ -211,6 +216,11 @@ def build_history(
     treatment: if a *held* symbol's history is missing we raise ``MissingHistory`` (a chart that
     silently drops a position understates someone's money), but if only the *index* is missing we
     still return the user's own line and leave the comparison empty.
+
+    ``since`` narrows the answer to one stretch (the chart's period selector). It is a slice of
+    a series we build over the account's whole life either way, so a shorter period costs no
+    extra provider call. The index leg is rebought at the window's opening value, so both lines
+    still start at the same number.
     """
     trades = [
         Trade(
@@ -238,12 +248,24 @@ def build_history(
         benchmark_closes = {}  # the user's own line is still correct; we just can't compare
 
     dates = _trading_days(opened_on, benchmark_closes, closes)
-    portfolio = portfolio_value_series(starting_balance, trades, closes, dates)
-    benchmark = benchmark_series(starting_balance, benchmark_closes, dates)
-    comparison = compare_to_benchmark(starting_balance, portfolio, benchmark)
+    full = portfolio_value_series(starting_balance, trades, closes, dates)
+    portfolio = trim_to(full, since)
+    window = [point.on for point in portfolio]
+
+    # Over the account's whole life the baseline is the money it opened with, which is what
+    # makes both lines start at exactly the same number. Over a shorter stretch it is whatever
+    # the account was worth on that stretch's first day: the same question asked from a later
+    # day. Asking for a year on a three-day-old account is its whole life, so it takes the
+    # starting balance too.
+    full_window = len(portfolio) == len(full)
+    baseline = starting_balance if full_window or not portfolio else portfolio[0].value
+
+    benchmark = benchmark_series(baseline, benchmark_closes, window)
+    comparison = compare_to_benchmark(baseline, portfolio, benchmark)
 
     return HistoryResult(
         benchmark_symbol=benchmark_symbol if benchmark else None,
+        baseline=baseline,
         portfolio=portfolio,
         benchmark=benchmark,
         comparison=comparison,

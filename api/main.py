@@ -103,6 +103,14 @@ MAX_TUTOR_MESSAGES = 20
 WHAT_IF_DAYS = {"1m": 30, "6m": 182, "1y": 365, "2y": 730}
 WhatIfPeriod = Literal["1m", "6m", "1y", "2y"]
 
+# How far back the performance chart looks. "all" is the account's whole life and stays the
+# default, so the tutor and anyone else calling this still get the since-you-started answer.
+# Deliberately nothing shorter than a month: a one-day or one-week view of your own money is
+# what makes people trade on noise, which is the exact habit the benchmark line warns against.
+# A shorter period is a slice of the series we build anyway, so it costs no provider call.
+HISTORY_PERIOD_DAYS = {"1m": 30, "6m": 182, "1y": 365}
+HistoryPeriod = Literal["1m", "6m", "1y", "all"]
+
 # The market-data routes don't touch anyone's account, but they do spend our Finnhub
 # and Twelve Data quota, so they're for signed-in users only. Everything under /api
 # needs a token; /health is the only open door.
@@ -252,12 +260,16 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
 
 @app.get("/api/portfolio/history")
 def read_portfolio_history(
-    account: AccountDep, session: SessionDep, candles: CandleDep
+    account: AccountDep, session: SessionDep, candles: CandleDep, period: HistoryPeriod = "all"
 ) -> PortfolioHistoryOut:
     """The performance chart: what the account has been worth, against the S&P 500.
 
     Rebuilt from the transactions and real closing prices rather than read from a stored
     snapshot, so it is exact from the account's first day. See services/analysis/history.py.
+
+    ``period`` narrows it to one stretch. The series is built over the account's whole life
+    either way and then sliced, off candles we already fetched and cached, so switching periods
+    spends no provider quota.
     """
     rows = list(
         session.scalars(
@@ -266,6 +278,7 @@ def read_portfolio_history(
             .order_by(Transaction.timestamp)
         )
     )
+    days = HISTORY_PERIOD_DAYS.get(period)
     try:
         history = build_history(
             rows,
@@ -273,6 +286,7 @@ def read_portfolio_history(
             opened_on=account.created_at.date(),
             starting_balance=account.starting_balance,
             benchmark_symbol=BENCHMARK_SYMBOL,
+            since=date.today() - timedelta(days=days) if days is not None else None,
         )
     except MissingHistory as exc:
         # Without a held symbol's prices the whole line would be wrong, and a wrong chart
@@ -286,6 +300,8 @@ def read_portfolio_history(
 
     return PortfolioHistoryOut(
         starting_balance=_round2(account.starting_balance),
+        period=period,
+        baseline=_round2(history.baseline),
         benchmark_symbol=history.benchmark_symbol,
         points=[
             HistoryPointOut(
