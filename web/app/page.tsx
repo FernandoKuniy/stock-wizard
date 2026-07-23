@@ -1,24 +1,15 @@
-import Link from "next/link";
-
 import { Achievements } from "@/components/Achievements";
-import { AllocationChart } from "@/components/AllocationChart";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
-import { HoldingsTable } from "@/components/HoldingsTable";
-import { OpenOrders } from "@/components/OpenOrders";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
+import { TopHoldings } from "@/components/TopHoldings";
 import { Tutor } from "@/components/Tutor";
-import { Watchlist } from "@/components/Watchlist";
 import {
-  getOrders,
   getPortfolio,
   getPortfolioHistory,
-  getWatchlist,
-  type Order,
   type Portfolio,
   type PortfolioHistory,
-  type WatchlistItem,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
@@ -26,6 +17,13 @@ import { getAccessToken } from "@/lib/supabase/server";
 // The portfolio is live data, so render on every request rather than at build.
 export const dynamic = "force-dynamic";
 
+/**
+ * The overview. This page answers one question, "how am I doing?", and nothing else.
+ *
+ * Holdings, orders, the watchlist and your trade history all live on their own pages now.
+ * Keeping them off here is the point: someone nervous should be able to log in, read one
+ * number and one sentence, and stop.
+ */
 export default async function Home() {
   const token = await getAccessToken();
 
@@ -43,7 +41,11 @@ export default async function Home() {
   }
 
   // The chart is the nice-to-have here. If the market data is having a bad day, the rest of
-  // the dashboard still has to work, so a failure here is not a failure of the page.
+  // the page still has to work, so a failure here is not a failure of the page.
+  //
+  // Sequential on purpose: the portfolio call above settles any limit order whose price has
+  // arrived, and the history is rebuilt from the transactions. Racing them could draw a
+  // chart that misses an order that just filled.
   let history: PortfolioHistory | null = null;
   try {
     history = await getPortfolioHistory(token);
@@ -51,33 +53,12 @@ export default async function Home() {
     history = null;
   }
 
-  // The portfolio call above already settled any limit order whose price arrived, so this
-  // just reads the result. Sequential on purpose: two sweeps at once would be wasted work.
-  let orders: Order[] = [];
-  try {
-    orders = await getOrders(token);
-  } catch {
-    orders = [];
-  }
-
-  // The watchlist is a side panel, not the point of the page, so a failure here just hides
-  // it rather than breaking the dashboard.
-  let watchlist: WatchlistItem[] = [];
-  try {
-    watchlist = await getWatchlist(token);
-  } catch {
-    watchlist = [];
-  }
-
   const hasHoldings = portfolio.holdings.length > 0;
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Your portfolio</h1>
-          <ResetButton />
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">How you&apos;re doing</h1>
 
         <FirstTimeCallout id="welcome" title="None of this is real money">
           You&apos;ve got {formatMoney(portfolio.starting_balance)} of fake cash and real market
@@ -104,31 +85,16 @@ export default async function Home() {
         )}
 
         {hasHoldings ? (
-          <>
-            <AllocationChart portfolio={portfolio} />
-            <HoldingsTable holdings={portfolio.holdings} />
-          </>
+          <TopHoldings holdings={portfolio.holdings} />
         ) : (
           <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
             <p className="text-lg font-medium">
               You&apos;ve got {formatMoney(portfolio.cash)} to invest.
             </p>
             <p className="mt-1 text-sm text-zinc-500">
-              Your holdings will show up here once you buy your first stock.
+              Search for a company up top to see its price and buy some.
             </p>
           </div>
-        )}
-
-        {orders.length > 0 && <OpenOrders orders={orders} />}
-
-        {watchlist.length > 0 && (
-          <>
-            <FirstTimeCallout id="watchlist" title="Your watchlist">
-              These are stocks you&apos;re keeping an eye on. Adding one costs nothing and
-              doesn&apos;t buy anything. Open a stock and hit Watch to track it here.
-            </FirstTimeCallout>
-            <Watchlist items={watchlist} />
-          </>
         )}
 
         <FirstTimeCallout id="achievements" title="Badges for good habits">
@@ -140,10 +106,14 @@ export default async function Home() {
 
         <Tutor />
 
-        <div>
-          <Link href="/transactions" className="text-sm text-zinc-500 hover:underline">
-            See your transaction history →
-          </Link>
+        {/* Down here on purpose. The reset button is one of the two things that most reduce
+            beginner anxiety, so it stays easy to find, but sitting next to the headline
+            number it reads like a warning rather than a safety net. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800">
+          <p className="text-sm text-zinc-500">
+            Had enough? Wipe it all and start over with {formatMoney(portfolio.starting_balance)}.
+          </p>
+          <ResetButton />
         </div>
       </div>
 

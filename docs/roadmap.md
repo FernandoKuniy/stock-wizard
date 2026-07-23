@@ -93,6 +93,27 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 - [x] Achievements and streaks (shipped as habit badges; teaching over retention, see
       decisions.md). **M4 complete.**
 
+## M5. Layout and the second teaching pass
+
+The dashboard split comes first, because most of the features below need somewhere to live
+and adding them to the old single page would have made the chaos worse before it got better.
+
+- [~] Split the dashboard into Overview / Holdings / Activity, with a three-item nav.
+- [ ] Dock the tutor so it's reachable from every page, not just the overview.
+- [ ] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
+      windows are what make people trade.
+- [ ] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
+      reason. Surfaces the concentration and sector math `analysis/risk.py` already computes.
+- [ ] "What moved your money": per-position P/L as a ranked sentence, not a table column.
+- [ ] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
+- [ ] Monthly-investing comparison in the time machine (lump sum vs the same money spread out).
+- [ ] "Why did it move?" news on a big daily change (product-spec has always listed this).
+- [ ] Biggest daily moves of the last year, with that day's headline where we have one.
+- [ ] Calm mode: hide the dollar amounts, keep the plain-English sentence.
+- [ ] Glossary page over the terms we already define on both sides.
+- [ ] Start-here path for a brand new account.
+- [ ] Mobile and keyboard pass.
+
 ## Progress log
 
 - 2026-07-22  M4 (achievements) code complete, the last extra, which **completes M4**. Shipped

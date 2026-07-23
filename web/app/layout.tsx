@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 
+import { Nav } from "@/components/Nav";
 import { TickerSearch } from "@/components/TickerSearch";
 import { getUser } from "@/lib/supabase/server";
 import { signOut } from "./login/actions";
@@ -29,7 +30,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Signed out, the only page you can reach is the login screen, so the header is
-  // just the wordmark. No search box, nothing to sign out of.
+  // just the wordmark. No search box, no nav, nothing to sign out of.
   const user = await getUser();
 
   return (
@@ -56,6 +57,7 @@ export default async function RootLayout({
               </>
             )}
           </div>
+          {user && <Nav />}
         </header>
         {children}
       </body>

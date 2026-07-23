@@ -6,6 +6,18 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  The dashboard splits into **three routes** (Overview `/`, Holdings `/holdings`,
+  Activity `/activity`) instead of the single stacked page it had been through M4. One page
+  doing five jobs contradicted both stated UX principles ("one screen answers how am I doing"
+  and "show a beginner three buttons, not thirty"), and every extra M5 feature would have made
+  it worse. Deliberately **not** a fourth "Learn" destination holding the tutor and the badges:
+  product-spec.md warns against a Learn tab nobody visits, and moving the tutor off the one
+  screen everyone opens would cost it its whole audience. So the badges stay at the bottom of
+  the overview and the tutor stays reachable everywhere. This is a **frontend-only** change: no
+  route, schema or analysis change, and each page fetches only what it renders, which *lowers*
+  provider traffic (the expensive history rebuild now fires only on the overview, and watchlist
+  quotes only for people who open Activity). `/transactions` becomes a permanent redirect to
+  `/activity` rather than a fourth page.
 - 2026-07-22  Achievements (M4, last extra) reward **understanding and good habits, never
   activity and never outcomes**, which reframes the feature's goal from the product spec's
   "streaks to bring people back" (retention) to **teaching**. A mechanic that pulls a beginner

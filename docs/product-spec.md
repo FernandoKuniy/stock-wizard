@@ -45,6 +45,22 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
   how long you leave a position alone, which is the one that lines up with good outcomes. See
   decisions.md (2026-07-22) for why the goal shifted from retention to teaching.
 
+## Screens
+
+Three destinations, one job each. The dashboard used to stack everything on one page, which
+meant the first screen answered five questions at once and contradicted both UX principles
+below. Splitting it is what lets the overview answer only "how am I doing?".
+
+- **Overview** (`/`): total value, gain/loss, the performance chart against the S&P 500, a
+  three-line strip of what you own, the habit badges, the tutor, and the reset button. The
+  landing screen, and the only one a nervous beginner has to read.
+- **Holdings** (`/holdings`): the allocation donut and the full holdings table.
+- **Activity** (`/activity`): waiting limit orders, the watchlist, and the full transaction
+  history. (`/transactions` redirects here.)
+
+There is deliberately no fourth "Learn" destination, for the reason in the next section. The
+teaching stays where the thing being taught is.
+
 ## Education approach: teach in the flow
 
 Do NOT build a separate "Learn" tab that nobody visits. Weave teaching into the product:
@@ -57,9 +73,11 @@ Do NOT build a separate "Learn" tab that nobody visits. Weave teaching into the 
 
 ## UX principles
 
-- One screen answers "how am I doing?" the second they log in. No hunting.
+- One screen answers "how am I doing?" the second they log in. No hunting. That screen is the
+  overview, and it does not do anything else.
 - Progressive disclosure. Show a beginner three buttons, not thirty. Advanced order types
-  and chart tools unlock as they go.
+  and chart tools unlock as they go. The nav is three destinations for the same reason, and
+  a section with nothing in it says so in a line rather than filling the page.
 - Green and red always come with an explanation attached, never a naked number.
 - Zero jargon by default, jargon on tap.
 - The reset button and the "vs the index" comparison are the two features that most reduce
