@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { askTutor, type TutorMessage } from "@/lib/api";
 import { getAccessToken } from "@/lib/supabase/client";
@@ -9,11 +9,30 @@ import { Markdown } from "./Markdown";
 // A few openers so a first-time user knows the kind of thing to ask.
 const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the market?"];
 
+/**
+ * The tutor conversation. Lives inside TutorPanel, which is mounted in the root layout, so
+ * the thread survives moving between pages and is only lost on a full reload. That matches
+ * the design: nothing is stored server-side, the whole thread is re-sent each turn.
+ *
+ * Fills its container rather than sizing itself, because the panel owns the height.
+ */
 export function Tutor() {
   const [messages, setMessages] = useState<TutorMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // In a fixed-height panel a new answer lands below the fold, so follow it down.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, busy]);
+
+  // Opening the panel should put the cursor where you're about to type.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   async function send(text: string) {
     const question = text.trim();
@@ -35,16 +54,15 @@ export function Tutor() {
   }
 
   return (
-    <section className="rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <div className="border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
-        <h2 className="text-sm font-semibold">Ask the tutor</h2>
-        <p className="mt-0.5 text-xs text-zinc-500">
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+        <p className="text-xs text-zinc-500">
           It reads your real portfolio and explains it in plain English. A simulation for learning,
           not financial advice.
         </p>
       </div>
 
-      <div className="space-y-3 px-5 py-4">
+      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (
           <div className="space-y-3">
             <p className="text-sm text-zinc-500">
@@ -86,6 +104,7 @@ export function Tutor() {
 
         {busy && <p className="text-xs text-zinc-400">Thinking…</p>}
         {error && <p className="text-sm text-red-500">{error}</p>}
+        <div ref={endRef} />
       </div>
 
       <form
@@ -93,9 +112,10 @@ export function Tutor() {
           event.preventDefault();
           void send(input);
         }}
-        className="flex items-center gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800"
+        className="flex shrink-0 items-center gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800"
       >
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -111,6 +131,6 @@ export function Tutor() {
           Ask
         </button>
       </form>
-    </section>
+    </div>
   );
 }

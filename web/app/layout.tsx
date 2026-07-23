@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { Nav } from "@/components/Nav";
 import { TickerSearch } from "@/components/TickerSearch";
+import { TutorPanel } from "@/components/TutorPanel";
 import { getUser } from "@/lib/supabase/server";
 import { signOut } from "./login/actions";
 import "./globals.css";
@@ -57,7 +58,12 @@ export default async function RootLayout({
               </>
             )}
           </div>
-          {user && <Nav />}
+          {user && (
+            <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-6">
+              <Nav />
+              <TutorPanel />
+            </div>
+          )}
         </header>
         {children}
       </body>

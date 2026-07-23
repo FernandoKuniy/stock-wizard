@@ -4,7 +4,6 @@ import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
 import { TopHoldings } from "@/components/TopHoldings";
-import { Tutor } from "@/components/Tutor";
 import {
   getPortfolio,
   getPortfolioHistory,
@@ -103,8 +102,6 @@ export default async function Home() {
           There&apos;s no streak to keep and nothing to chase. Tap one to read why it matters.
         </FirstTimeCallout>
         <Achievements items={portfolio.achievements} />
-
-        <Tutor />
 
         {/* Down here on purpose. The reset button is one of the two things that most reduce
             beginner anxiety, so it stays easy to find, but sitting next to the headline

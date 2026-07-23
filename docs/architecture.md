@@ -303,9 +303,13 @@ the model can ask for figures but can never compute them itself. Built in M3.
   model rounding a figure for display). It is the enforceable form of hard rule #1: the tests
   assert it holds over controlled tool output, and at runtime it logs violations rather than
   mangling wording (the tools plus the prompt are the enforcement; the guard watches it hold).
-- **UI**: a dashboard chat panel keeps a short "simulation, not financial advice" disclaimer
-  visible. The conversation is ephemeral: the thread lives in the browser and is sent back each
-  turn, so nothing is stored server-side (no table, matching the stateless completion API).
+- **UI**: a slide-over chat panel, opened from a button in the header, so the tutor is one
+  click away from every page rather than living at the bottom of one of them. It keeps a short
+  "simulation, not financial advice" disclaimer visible. The conversation is ephemeral: the
+  thread lives in the browser and is sent back each turn, so nothing is stored server-side (no
+  table, matching the stateless completion API). The panel is mounted in the root layout, which
+  persists across navigation, so the thread survives moving between pages and is lost only on a
+  full reload, which is the same ephemerality as before.
 
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the

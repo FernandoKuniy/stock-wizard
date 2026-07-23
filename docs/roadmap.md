@@ -99,7 +99,7 @@ The dashboard split comes first, because most of the features below need somewhe
 and adding them to the old single page would have made the chaos worse before it got better.
 
 - [~] Split the dashboard into Overview / Holdings / Activity, with a three-item nav.
-- [ ] Dock the tutor so it's reachable from every page, not just the overview.
+- [~] Dock the tutor so it's reachable from every page, not just the overview.
 - [ ] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
       windows are what make people trade.
 - [ ] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
