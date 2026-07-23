@@ -6,6 +6,34 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  Achievements (M4, last extra) reward **understanding and good habits, never
+  activity and never outcomes**, which reframes the feature's goal from the product spec's
+  "streaks to bring people back" (retention) to **teaching**. A mechanic that pulls a beginner
+  into a *trading* app daily nudges them to look at their money daily, which is upstream of
+  trading and reacting more, the exact behaviour the benchmark chart exists to warn against;
+  and rewarding profit rewards luck and teaches a beginner to read a month of noise as skill.
+  So the six badges are all habits whose finance is settled: holding five companies at once,
+  holding a position through 1/3/6/12 months, and sitting through a 15%+ dip without selling.
+  We deliberately **cut** the mechanics-milestone tier (first buy, first limit order, asked the
+  tutor, used the time machine), which keeps every badge to pure lazy detection with no
+  event-awarding at other routes. We accept lower engagement as the price of not teaching the
+  wrong lesson.
+- 2026-07-22  The "streaks" half of the roadmap item ships as **holding duration**, not a
+  daily-visit streak. A consecutive-days streak (even a "learning streak") runs on manufactured
+  loss aversion and, in this app, the room it pulls you back to is your own portfolio. Holding
+  duration is the only streak that correlates with good outcomes, and it comes free from the
+  transactions we already store, so it needs no `last_seen_on` column or visits table (keeping
+  faith with the 2026-07-14 decision that non-money session state doesn't earn a table).
+- 2026-07-22  Achievement detection is **lazy on `GET /api/portfolio`**, the same no-cron shape
+  as the limit-order sweep, off the snapshot already in hand so it costs no provider call. The
+  result rides along on the portfolio payload rather than adding a route. Awarding is
+  **add-only and idempotent** (unique on (account_id, key)); a badge is never revoked and
+  **survives a reset**, since it's a learning record, not money. The "held through a dip" badge
+  ships in its **cheap form**: it only catches drops below cost basis, because catching a true
+  peak-to-trough drawdown would need a second candle fetch per symbol and real pressure on
+  Twelve Data's tier. The **AI tutor gets no achievements tool** this milestone: a
+  congratulating tutor drifts toward endorsement faster than a static badge does, for no
+  teaching gain.
 - 2026-07-15  The M4 "time machine" ships as a **what-if calculator** ("what if you'd put $1,000 into this a year ago?"), not the replay mode the vague roadmap line could also have meant, since replaying the market forward from a past date is effectively a second simulation engine for no extra teaching gain. The lookback is capped at two years, the candle window we already fetch and cache, so a what-if on a stock page normally costs no provider call at all; reaching further back would need a second longer fetch per symbol and real pressure on Twelve Data's 8/min tier. The result **always** shows the same money in the index over the same window, because "you'd have made $500" alone reads as a nudge to buy (hard rule #2), and the comparison is dropped rather than drawn if the index can't be priced over that same window. Shares stay exact fractions rather than rounding down to 6dp like a real fill, since a hypothetical that rounds would invent a loss the user never took.
 - 2026-07-15  Limit orders fill **lazily**, swept against a fresh quote whenever the user loads their portfolio or their orders, because this app deliberately runs no background job (the same reasoning that made portfolio history a rebuild-on-demand rather than a stored snapshot). A crossed order fills at its **limit price**, not at the quote we happened to see, since the price passed through the limit on its way and filling at a later snapshot would pretend the user timed the move. **Nothing is reserved at placement**: cash moves only at fill, which leaves every existing money figure untouched, so an account can rest more buys than it can afford, oldest-first wins, and one that can no longer be covered is cancelled with a reason rather than part-filled. Orders are good-till-cancelled and all-or-nothing (no expiry status, no partial fills), and a symbol we can't quote is never filled.
 - 2026-07-15  `engine.fill_buy`/`fill_sell` were promoted to shared settlement primitives (with `fill_sell` extracted to mirror the existing `fill_buy`), so market orders, the seed backfill, and the limit sweep all bookkeep a fill through the same code and the money math cannot drift between them. `reset` now clears orders before transactions, since a filled order references the trade it became.

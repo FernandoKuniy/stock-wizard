@@ -35,7 +35,15 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
 - Per-stock news feed (Finnhub provides this).
 - Historical "time machine" mode: start in a past year, fast-forward, see how you would have
   done. Teaches compounding and volatility in a way that actually lands.
-- Achievements and streaks to bring people back. Light gamification, not slot-machine stuff.
+- Achievements that reward good habits, not activity or outcomes. The original framing was
+  "streaks to bring people back", but a mechanic that pulls a beginner into a trading app
+  daily nudges them to trade and react more, the exact behaviour the benchmark chart warns
+  against. So these reward understanding and patience instead: holding several companies,
+  holding a position for months, and sitting through a dip without panic-selling. Each badge
+  is named for the fact it marks (not the praise), and opens a short explainer, which is the
+  real point. No activity or profit badges, and no daily-visit streak; the only "streak" is
+  how long you leave a position alone, which is the one that lines up with good outcomes. See
+  decisions.md (2026-07-22) for why the goal shifted from retention to teaching.
 
 ## Education approach: teach in the flow
 

@@ -90,10 +90,27 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 - [x] Watchlists.
 - [x] Per-stock news feed.
 - [x] Historical "time machine" mode (shipped as a what-if calculator; see decisions.md).
-- [ ] Achievements and streaks.
+- [x] Achievements and streaks (shipped as habit badges; teaching over retention, see
+      decisions.md). **M4 complete.**
 
 ## Progress log
 
+- 2026-07-22  M4 (achievements) code complete, the last extra, which **completes M4**. Shipped
+  as habit badges rather than the "streaks to bring people back" the spec named: rewarding
+  activity or profit in a trading app teaches the exact behaviour the benchmark chart warns
+  against, so the goal was redefined from retention to teaching (see decisions.md). Six badges,
+  all good habits: five companies at once, holding a position through 1/3/6/12 months (the only
+  "streak", from data we already store, so no new column), and sitting through a 15%+ dip
+  without selling. New pure `services/analysis/achievements.py` (a `continuous_hold_days` walk
+  and an `evaluate` predicate over plain facts, plus the static badge copy) and a thin
+  `services/achievements.py` awarding layer beside `portfolio.py`. Detection is lazy on `GET
+  /api/portfolio` off the snapshot already in hand (no provider call, no cron, no new route),
+  add-only and idempotent (unique on account+key), and it survives a reset. One new table
+  (migration 0005). The tutor deliberately gets no achievements tool. 227 backend tests green
+  (25 new: the hold-duration boundaries incl. sell-and-rebuy resetting the clock, every ladder
+  threshold, the dip's time/percent/unpriced cases, awarding idempotency and add-only, plus
+  account isolation and survive-reset through the API); ruff + mypy clean; web passes eslint +
+  prettier + tsc and a production build. Browser click-through still pending a sign-in.
 - 2026-07-15  M4 (time machine) code complete, the fourth extra, shipped as a what-if calculator
   rather than a replay mode (see decisions.md). A new pure `services/analysis/whatif.py` buys at
   the real close on the first trading day on or after the start date, values it at the latest

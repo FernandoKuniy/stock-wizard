@@ -22,6 +22,7 @@ from db import get_db
 from deps import get_current_account
 from models import Account, Holding, Order, Transaction, WatchlistItem
 from schemas import (
+    AchievementOut,
     BenchmarkComparisonOut,
     CandlePointOut,
     CandlesOut,
@@ -45,6 +46,7 @@ from schemas import (
     WhatIfLegOut,
     WhatIfOut,
 )
+from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import ValuePoint
 from services.analysis.whatif import NotEnoughHistory, WhatIfLeg
 from services.market.candles import CandleClient, get_candle_client
@@ -58,6 +60,7 @@ from services.market.client import (
 from services.portfolio import (
     HoldingView,
     MissingHistory,
+    PortfolioSnapshot,
     build_history,
     build_snapshot,
     build_what_if,
@@ -231,6 +234,7 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         )
     )
     snapshot = build_snapshot(holdings, account.cash_balance, account.starting_balance, market)
+    achievements = _award_achievements(session, account, snapshot)
 
     return PortfolioOut(
         cash=_round2(snapshot.cash),
@@ -242,6 +246,7 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         cash_weight=_round2(snapshot.cash_weight),
         holdings=[_holding_out(h) for h in snapshot.holdings],
         unpriced_symbols=snapshot.unpriced_symbols,
+        achievements=achievements,
     )
 
 
@@ -486,6 +491,32 @@ def _sweep_orders(session: Session, account: Account, market: MarketClient) -> N
     """
     if sim_orders.sweep(session, account, market):
         session.commit()
+
+
+def _award_achievements(
+    session: Session, account: Account, snapshot: PortfolioSnapshot
+) -> list[AchievementOut]:
+    """Detect any newly-earned habit badges from the snapshot in hand, and return them all.
+
+    Same lazy, no-cron shape as the order sweep: badges are checked when the user loads their
+    dashboard, off data already fetched, so it costs no provider call. We commit only when a
+    badge was actually earned, so a steady-state load stays a pure read.
+    """
+    result = award_achievements(session, account, snapshot)
+    if result.newly_awarded:
+        session.commit()
+    return [_achievement_out(badge) for badge in result.badges]
+
+
+def _achievement_out(badge: EarnedBadge) -> AchievementOut:
+    return AchievementOut(
+        key=badge.key,
+        title=badge.title,
+        requirement=badge.requirement,
+        lesson=badge.lesson,
+        earned=badge.earned,
+        earned_at=badge.earned_at,
+    )
 
 
 def _place_limit_order(session: Session, account: Account, body: OrderRequest) -> OrderResultOut:

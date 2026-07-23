@@ -41,9 +41,15 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
 - `watchlist_items`: id, account_id, symbol, created_at, with a unique constraint on
   (account_id, symbol). Symbols the account is tracking without owning. No money columns:
   a watchlist is just a list of tickers. Added in M4.
+- `achievements`: id, account_id, key, earned_at, with a unique constraint on (account_id,
+  key). One row per badge an account has earned. The unique constraint makes awarding
+  idempotent, so the lazy re-check on every dashboard load only writes the first time. Add-only
+  (a badge is never removed) and it survives a reset, since it's a learning record, not money.
+  Added in M4.
 
 Reset = set cash_balance back to starting_balance, delete holdings and transactions for
-that account.
+that account. The watchlist and the achievements deliberately survive: neither is money, and
+a badge is a record of something you once did, which a reset doesn't undo.
 
 ## Backend data layer and identity
 
@@ -147,7 +153,8 @@ The paper-trading engine. Pure, testable functions over the database session:
   position.
 - `reset(session, account)`: restore the starting balance, clear holdings, orders, and
   transactions. Orders go first, since a filled one points at the trade it became. The
-  watchlist deliberately survives a reset: it is a list of things to look at, not money.
+  watchlist and the achievements deliberately survive a reset: the first is a list of things
+  to look at, and the second is a learning record, neither of which is money.
 - `fill_buy` / `fill_sell(session, account, symbol, shares, price)`: the settlement
   primitives. Given shares and a price they move the cash, update the holding, and write the
   transaction. Everything that can fill an order goes through them (market orders, the seed
@@ -326,6 +333,46 @@ only thing keeping one user's list out of another's):
 In the UI, adding happens on the stock page (a Watch button), and the dashboard shows the
 list with a live price and a remove control. The list section only appears once the account
 has watched something; the ever-present Watch button is the way in.
+
+## Achievements (M4)
+
+Light gamification, aimed at teaching rather than retention. The whole design follows from
+one decision (see decisions.md, 2026-07-22): rewarding activity (trades placed, days visited)
+or outcomes (beating the market, big profits) would push a beginner toward exactly the
+overtrading and outcome-chasing the benchmark chart exists to warn against. So every badge is
+a **good habit whose finance is settled**, and most can only be earned once, so none creates
+ongoing pressure. The set is six badges: holding five companies at once (diversification),
+holding a single position through 1 / 3 / 6 / 12 months (the only "streak" that lines up with
+good outcomes), and sitting through a 15%+ drop on a position held a month without selling.
+
+This is hard rule #1 applied to a teaching feature, split across the usual two layers:
+
+- **The fact is computed in `services/analysis/achievements.py`** (pure, no DB, no market).
+  `evaluate(AccountFacts)` returns the set of earned keys from plain facts (position count,
+  each position's continuous hold in days, each position's gain/loss). `continuous_hold_days`
+  is the one piece of real logic: it walks a symbol's fills and measures the current unbroken
+  hold, so selling out and re-buying resets the clock. The badge copy (`CATALOG`) is static,
+  written by a person; the model never decides who earned what or writes a word of it.
+- **The awarding is a thin composition step in `services/achievements.py`**, beside
+  `portfolio.py`. It builds the facts from the account's transactions (for hold duration) and
+  the already-built snapshot (for gain/loss), runs `evaluate`, and inserts any newly-earned
+  rows. It reads no market data of its own, so awarding costs no provider call.
+
+Detection is **lazy and no-cron**, the same shape as the limit-order sweep: badges are checked
+inside `GET /api/portfolio`, off the snapshot already in hand, and committed only when a badge
+is actually earned (a steady-state load stays a pure read). The result rides along on the
+portfolio payload rather than adding a route. Awarding is **add-only and idempotent**: the
+unique constraint on (account_id, key) means a re-check writes nothing once earned, and a
+badge is never revoked, so selling a stock you held for a year doesn't undo the badge and a
+reset leaves it standing. The dip badge only catches drops **below cost basis** (a stock that
+ran up then fell back is missed); catching a true peak-to-trough drawdown would need a second
+candle fetch per symbol, which isn't worth the pressure on Twelve Data's tier. The AI tutor is
+deliberately **not** given an achievements tool this milestone: a congratulating tutor drifts
+toward endorsement faster than a static badge does, for no teaching gain.
+
+In the UI, a dashboard "Good habits" section lists earned and still-locked badges; each opens
+its explainer with a native `<details>` (no client JS), and a locked badge shows how to earn
+it. There is no streak counter and no nudging, on purpose.
 
 ## Secrets and config
 

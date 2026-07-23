@@ -56,6 +56,7 @@ class Account(Base):
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
     watchlist_items: Mapped[list[WatchlistItem]] = relationship(back_populates="account")
     orders: Mapped[list[Order]] = relationship(back_populates="account")
+    achievements: Mapped[list[Achievement]] = relationship(back_populates="account")
 
 
 class Holding(Base):
@@ -117,6 +118,27 @@ class Order(Base):
 
     account: Mapped[Account] = relationship(back_populates="orders")
     transaction: Mapped[Transaction | None] = relationship()
+
+
+class Achievement(Base):
+    """A badge an account has earned: a deterministic fact about how they've invested.
+
+    One row per (account, key); the unique constraint is what makes awarding idempotent, so
+    a lazy check on every dashboard load can safely try to award the same badge repeatedly
+    and only the first attempt writes. Awarding is add-only: a badge is never taken back
+    (selling later doesn't undo the fact that you once held for a year), and achievements
+    deliberately survive a reset, since they're a learning record, not money. The fact that
+    earns each key is computed in services/analysis/achievements.py (hard rule #1)."""
+
+    __tablename__ = "achievements"
+    __table_args__ = (UniqueConstraint("account_id", "key", name="uq_achievements_account_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    earned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped[Account] = relationship(back_populates="achievements")
 
 
 class WatchlistItem(Base):

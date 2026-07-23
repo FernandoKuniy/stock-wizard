@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Achievements } from "@/components/Achievements";
 import { AllocationChart } from "@/components/AllocationChart";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
@@ -129,6 +130,13 @@ export default async function Home() {
             <Watchlist items={watchlist} />
           </>
         )}
+
+        <FirstTimeCallout id="achievements" title="Badges for good habits">
+          These aren&apos;t about trading more or beating the market. They mark habits that tend to
+          work out, like spreading your money around and sitting tight through a rough patch.
+          There&apos;s no streak to keep and nothing to chase. Tap one to read why it matters.
+        </FirstTimeCallout>
+        <Achievements items={portfolio.achievements} />
 
         <Tutor />
 

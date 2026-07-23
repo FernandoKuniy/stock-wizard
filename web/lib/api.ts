@@ -22,6 +22,18 @@ export type Holding = {
   weight: number | null;
 };
 
+// A habit badge. `requirement` is how you earn it (shown even when locked); `lesson` is the
+// teaching copy behind it. Both are written by a person, never generated. `earned_at` is null
+// until it's earned.
+export type Achievement = {
+  key: string;
+  title: string;
+  requirement: string;
+  lesson: string;
+  earned: boolean;
+  earned_at: string | null;
+};
+
 export type Portfolio = {
   cash: number;
   starting_balance: number;
@@ -34,6 +46,9 @@ export type Portfolio = {
   // Holdings we couldn't get a live price for. They're counted in the totals at what they
   // cost, so a flaky quote can't read as a loss the user never took.
   unpriced_symbols: string[];
+  // Habit badges, earned and still-locked, detected on this same load from the account's own
+  // holdings and trades. Rides along on the portfolio payload rather than its own request.
+  achievements: Achievement[];
 };
 
 export type HistoryPoint = { date: string; portfolio: number; benchmark: number | null };
