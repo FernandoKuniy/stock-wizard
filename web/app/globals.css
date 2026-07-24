@@ -24,3 +24,32 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Calm mode: blur the money so you can open the app without reading a number you'll react
+   to. Done in CSS off a `data-calm` attribute rather than in React, so the server components
+   that render the figures stay server components and the toggle costs no re-render. An inline
+   script in the layout sets the attribute before first paint, because a flash of your balance
+   is exactly what this exists to prevent. */
+/* A blur is always declared, even at zero, so every transition is plain numeric
+   interpolation between two blur radii. Going from `filter: none` to a blur is the
+   less well-specified case, and this costs one rule to avoid it entirely. */
+.calm {
+  filter: blur(0px);
+}
+
+:root[data-calm="on"] .calm {
+  filter: blur(7px);
+  user-select: none;
+}
+
+/* Reveal on hover or focus, so checking a figure on purpose stays one gesture away. */
+:root[data-calm="on"] .calm:hover,
+:root[data-calm="on"] .calm:focus-within {
+  filter: blur(0px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .calm {
+    transition: filter 120ms ease-out;
+  }
+}

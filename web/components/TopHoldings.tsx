@@ -43,9 +43,9 @@ export function TopHoldings({ holdings }: { holdings: Holding[] }) {
                 <span className="text-sm text-zinc-400">price unavailable</span>
               ) : (
                 <>
-                  <div className="text-sm">{formatMoney(holding.market_value)}</div>
+                  <div className="calm text-sm">{formatMoney(holding.market_value)}</div>
                   <div
-                    className={`text-xs ${
+                    className={`calm text-xs ${
                       holding.gain_loss >= 0 ? "text-green-600" : "text-red-600"
                     }`}
                   >

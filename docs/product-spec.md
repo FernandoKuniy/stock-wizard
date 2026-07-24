@@ -85,6 +85,11 @@ Do NOT build a separate "Learn" tab that nobody visits. Weave teaching into the 
 - Zero jargon by default, jargon on tap.
 - The reset button and the "vs the index" comparison are the two features that most reduce
   beginner anxiety. Treat both as core, not nice-to-have.
+- Calm mode ("Hide amounts", in the header) blurs the money figures on the two screens that
+  judge you, Overview and Holdings, and leaves the direction words readable. The one thing a
+  nervous beginner reliably does wrong is react to a red number, so being able to check in
+  without a figure to chew on is a real feature, not a gimmick. Hovering a blurred figure
+  reveals it, so looking on purpose stays one gesture away.
 
 ## Explicit non-goals
 

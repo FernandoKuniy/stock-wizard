@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 
+import { CalmToggle } from "@/components/CalmToggle";
 import { Nav } from "@/components/Nav";
 import { TickerSearch } from "@/components/TickerSearch";
 import { TutorPanel } from "@/components/TutorPanel";
@@ -36,6 +37,17 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <head>
+        {/* Set calm mode before the first paint. Doing it in an effect would flash the
+            balance on every load, which is the exact thing calm mode exists to prevent. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('stockwizard.calm')==='on')" +
+              "document.documentElement.dataset.calm='on'}catch(e){}",
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col">
         <header className="border-b border-zinc-200 dark:border-zinc-800">
           <div className="mx-auto flex w-full max-w-4xl items-center gap-4 px-6 py-3">
@@ -61,7 +73,10 @@ export default async function RootLayout({
           {user && (
             <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-6">
               <Nav />
-              <TutorPanel />
+              <div className="flex items-center gap-2">
+                <CalmToggle />
+                <TutorPanel />
+              </div>
             </div>
           )}
         </header>

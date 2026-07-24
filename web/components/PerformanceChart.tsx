@@ -94,8 +94,10 @@ export function PerformanceChart({ initial }: { initial: PortfolioHistory }) {
 
       {comparison && (
         <>
+          {/* Only the amount blurs under calm mode: "you're beating the market" is the part
+              worth reading without a figure attached to chew on. */}
           <p className="mt-1 text-lg font-medium">{headline(comparison.difference, whole)}</p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="calm mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             {phrase} you had {formatMoney(baseline)}. Now you&apos;ve got{" "}
             {formatMoney(comparison.portfolio_value)}. Putting all of it into the S&P 500 back then
             would have made it {formatMoney(comparison.benchmark_value)}.
@@ -182,12 +184,24 @@ export function PerformanceChart({ initial }: { initial: PortfolioHistory }) {
   );
 }
 
-/** The one sentence that answers "how am I actually doing?" */
-function headline(difference: number, whole: boolean): string {
+/** The one sentence that answers "how am I actually doing?"
+ *
+ * The amount is wrapped so calm mode blurs the figure and leaves the direction, which is the
+ * whole idea: you can tell you're ahead or behind without a number to react to.
+ */
+function headline(difference: number, whole: boolean) {
   const over = whole ? "" : "Over this stretch, ";
   if (Math.abs(difference) < 1) return `${over}you're neck and neck with the market.`;
-  if (difference > 0) return `${over}you're beating the market by ${formatMoney(difference)}.`;
-  return `${over}the market is beating you by ${formatMoney(Math.abs(difference))}.`;
+  const amount = <span className="calm">{formatMoney(Math.abs(difference))}</span>;
+  return difference > 0 ? (
+    <>
+      {over}you&apos;re beating the market by {amount}.
+    </>
+  ) : (
+    <>
+      {over}the market is beating you by {amount}.
+    </>
+  );
 }
 
 function Legend({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {

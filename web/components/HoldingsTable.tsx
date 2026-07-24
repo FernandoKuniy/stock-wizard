@@ -42,17 +42,21 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
                 <td className="px-4 py-3 text-right tabular-nums">
                   {holding.price === null ? "—" : formatMoney(holding.price)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-zinc-500">
+                <td className="calm px-4 py-3 text-right tabular-nums text-zinc-500">
                   {formatMoney(holding.cost_basis)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
+                <td className="calm px-4 py-3 text-right tabular-nums">
                   {holding.market_value === null ? "—" : formatMoney(holding.market_value)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {holding.gain_loss === null || holding.gain_loss_percent === null ? (
                     <span className="text-zinc-400">price unavailable</span>
                   ) : (
-                    <span className={holding.gain_loss >= 0 ? "text-green-600" : "text-red-600"}>
+                    <span
+                      className={`calm ${
+                        holding.gain_loss >= 0 ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
                       {formatSignedMoney(holding.gain_loss)} (
                       {formatPercent(holding.gain_loss_percent)})
                     </span>

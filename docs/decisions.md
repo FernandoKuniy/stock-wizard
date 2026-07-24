@@ -6,6 +6,18 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  Calm mode is implemented as a **CSS blur off a `data-calm` attribute on `<html>`**,
+  not as React state. A context would have forced `PortfolioSummary`, `TopHoldings` and
+  `HoldingsTable` to become client components purely to read a display preference, and the
+  toggle would re-render the tree; an attribute plus one CSS rule costs neither. An inline
+  script in the layout sets it **before first paint**, because an effect would flash the balance
+  on every load, which is the exact thing the feature exists to prevent. "On" lives in
+  localStorage, matching the first-time explainers: a UI preference, not money. It **blurs
+  rather than hides**, and reveals on hover, so it stays a calm feature and not a privacy claim
+  it can't back (blurred text is still selectable and readable by a screen reader). Scoped to
+  **Overview and Holdings**, the two screens that judge you; the transaction ledger and the
+  watchlist are records of what you did, not a live verdict, so they're left alone. A stock's
+  own market price is left readable too: it's a public fact, not your money.
 - 2026-07-22  "What if you'd never sold" ships as a **fact next to the benchmark line**, not as
   a lesson. It was the one M5 item flagged as close to advice, and what makes it teachable is
   that it comes out *both* ways: selling before a drop is real, and the copy states the

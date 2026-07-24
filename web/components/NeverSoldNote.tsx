@@ -18,7 +18,9 @@ export function NeverSoldNote({ never_sold, actual }: { never_sold: NeverSold; a
 
   return (
     <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-      <p className="text-sm text-zinc-700 dark:text-zinc-300">
+      {/* The whole sentence blurs under calm mode: it's figures end to end, with no direction
+          word worth keeping on its own. */}
+      <p className="calm text-sm text-zinc-700 dark:text-zinc-300">
         {same ? (
           <>
             If you&apos;d never sold anything, you&apos;d have about what you&apos;ve got now,{" "}
