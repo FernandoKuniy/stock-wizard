@@ -98,24 +98,50 @@ single-seeded-user assumption. The docs always said auth lands in M2; this is th
 The dashboard split comes first, because most of the features below need somewhere to live
 and adding them to the old single page would have made the chaos worse before it got better.
 
-- [~] Split the dashboard into Overview / Holdings / Activity, with a three-item nav.
-- [~] Dock the tutor so it's reachable from every page, not just the overview.
-- [~] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
+- [x] Split the dashboard into Overview / Holdings / Activity, with a three-item nav.
+- [x] Dock the tutor so it's reachable from every page, not just the overview.
+- [x] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
       windows are what make people trade.
-- [~] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
+- [x] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
       reason. Surfaces the concentration and sector math `analysis/risk.py` already computes.
-- [~] "What moved your money": per-position P/L as a ranked sentence, not a table column.
-- [~] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
-- [~] Monthly-investing comparison in the time machine (lump sum vs the same money spread out).
-- [~] "Why did it move?" news on a big daily change (product-spec has always listed this).
-- [~] Biggest daily moves of the last year, with that day's headline where we have one.
-- [~] Calm mode: hide the dollar amounts, keep the plain-English sentence.
-- [~] Glossary page over the terms we already define on both sides.
-- [~] Start-here path for a brand new account.
-- [~] Mobile and keyboard pass.
+- [x] "What moved your money": per-position P/L as a ranked sentence, not a table column.
+- [x] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
+- [x] Monthly-investing comparison in the time machine (lump sum vs the same money spread out).
+- [x] "Why did it move?" news on a big daily change (product-spec has always listed this).
+- [x] Biggest daily moves of the last year, with that day's headline where we have one.
+- [x] Calm mode: hide the dollar amounts, keep the plain-English sentence.
+- [x] Glossary page over the terms we already define on both sides.
+- [x] Start-here path for a brand new account.
+- [x] Mobile and keyboard pass. **M5 code complete**
 
 ## Progress log
 
+- 2026-07-24  M5 code complete, in thirteen commits. The dashboard was one page doing five
+  jobs, which contradicted both stated UX principles, so it **split into three routes**
+  (Overview / Holdings / Activity) with the tutor docked in a slide-over reachable from every
+  page. Deliberately no fourth "Learn" tab: product-spec warns against one, so the badges sit
+  at the bottom of Overview and the glossary hangs off the tutor panel (see decisions.md). Then
+  eleven features, most of them surfacing math that already existed. New pure analysis modules
+  `checkup.py` (five spread-of-money checks), `movers.py` (which position moved your number)
+  and `moves.py` (a big-day note plus the biggest daily moves), plus `never_sold_series` and
+  `trim_to` in `history.py` and `spread_over` in `whatif.py`. Two new routes
+  (`/api/portfolio/checkup`, `/api/stock/{symbol}/moves`); everything else rode along on
+  payloads that already existed.
+  **Provider cost was the design constraint throughout** and it came out roughly flat: the
+  period selector, the never-sold comparison, the DCA leg, the big-move note and the biggest
+  moves all read candles or quotes already cached, and the two things that do spend quota are
+  scoped to the page that shows them (the check-up's sector lookup, skipped entirely for a
+  single holding; the news archive, one year-wide call per symbol cached six hours rather than
+  one call per day). Splitting the pages *lowered* traffic, since the expensive history rebuild
+  now fires only on Overview.
+  Hard rule #2 did most of the copy work: every composed sentence is written in Python beside
+  the rule that computes it, and `checkup`, `movers` and `moves` each carry a test asserting the
+  wording never reaches for the imperative or claims a cause. 313 backend tests green (86 new);
+  ruff + mypy clean; web passes eslint + prettier + tsc and a production build. Calm mode and
+  the mobile header were verified in a browser (the header overflowed a 375px phone by 40px and
+  wrapped at 320px before the fix); everything behind the login wall is still checked at the
+  HTTP and schema level only, so the **signed-in click-through is the one step left**, same as
+  it was for M3 and M4.
 - 2026-07-22  M4 (achievements) code complete, the last extra, which **completes M4**. Shipped
   as habit badges rather than the "streaks to bring people back" the spec named: rewarding
   activity or profit in a trading app teaches the exact behaviour the benchmark chart warns
