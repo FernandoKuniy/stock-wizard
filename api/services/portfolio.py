@@ -33,6 +33,7 @@ from services.analysis.history import (
     portfolio_value_series,
     trim_to,
 )
+from services.analysis.movers import Mover, what_moved
 from services.analysis.portfolio import (
     Position,
     portfolio_total_value,
@@ -112,6 +113,10 @@ class PortfolioSnapshot:
     # Symbols we couldn't get a live quote for. They're carried in the totals at cost (see
     # below) and flagged here so the caller can be honest that the figure is a little stale.
     unpriced_symbols: list[str]
+    # One sentence naming which position is behind the movement, or None when nothing has
+    # moved. Unrealized only, so it describes what's held now and never claims to explain the
+    # account's total gain (see services/analysis/movers.py).
+    what_moved: str | None
 
 
 def build_snapshot(
@@ -148,6 +153,7 @@ def build_snapshot(
     for holding in holdings:
         total_cost_basis += position_cost_basis(holding.quantity, holding.avg_cost)
     cash_weight = cash / total_value * _HUNDRED if total_value > _ZERO else _ZERO
+    views = [_holding_view(h, quoted, weights) for h in holdings]
 
     return PortfolioSnapshot(
         cash=cash,
@@ -157,8 +163,9 @@ def build_snapshot(
         total_gain_loss=gain_loss.absolute,
         total_gain_loss_percent=gain_loss.percent,
         cash_weight=cash_weight,
-        holdings=[_holding_view(h, quoted, weights) for h in holdings],
+        holdings=views,
         unpriced_symbols=unpriced,
+        what_moved=what_moved([Mover(v.symbol, v.gain_loss) for v in views]),
     )
 
 

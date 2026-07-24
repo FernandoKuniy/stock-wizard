@@ -257,6 +257,7 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         cash_weight=_round2(snapshot.cash_weight),
         holdings=[_holding_out(h) for h in snapshot.holdings],
         unpriced_symbols=snapshot.unpriced_symbols,
+        what_moved=snapshot.what_moved,
         achievements=achievements,
     )
 

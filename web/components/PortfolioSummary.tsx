@@ -21,6 +21,10 @@ export function PortfolioSummary({ portfolio }: { portfolio: Portfolio }) {
         {formatSignedMoney(gain)} ({formatPercent(portfolio.total_gain_loss_percent)})
       </div>
       <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{framing}</p>
+      {/* Written by the backend, and deliberately a separate sentence from the one above:
+          it covers what you're holding right now, while the total also carries money you've
+          already banked from things you sold. See services/analysis/movers.py. */}
+      {portfolio.what_moved && <p className="mt-1 text-sm text-zinc-500">{portfolio.what_moved}</p>}
       <div className="mt-4 grid grid-cols-2 gap-4 border-t border-zinc-100 pt-4 text-sm dark:border-zinc-800">
         <div>
           <div className="text-zinc-500">Cash to invest</div>

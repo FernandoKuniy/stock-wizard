@@ -454,6 +454,39 @@ def test_history_draws_the_portfolio_against_the_index(
     assert comparison["difference"] == -10000.0
 
 
+def test_portfolio_says_nothing_moved_on_an_empty_account(client: TestClient) -> None:
+    assert client.get("/api/portfolio").json()["what_moved"] is None
+
+
+def test_portfolio_names_what_moved(client: TestClient, market: FakeMarket) -> None:
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    # Bought 10 shares at 150, now worth 170, so the position is up $200.
+    market._prices["AAPL"] = 170.0
+
+    what_moved = client.get("/api/portfolio").json()["what_moved"]
+
+    assert what_moved == "AAPL is your only position that's moved, up $200.00."
+
+
+def test_portfolio_leaves_an_unpriced_holding_out_of_the_story(
+    client: TestClient, market: FakeMarket
+) -> None:
+    for symbol in ("AAPL", "MSFT"):
+        client.post(
+            "/api/orders", json={"symbol": symbol, "side": "buy", "mode": "shares", "value": 10}
+        )
+    market._prices["MSFT"] = 350.0  # up $500
+    market.failing.add("AAPL")  # no quote, so we don't know how it's doing
+
+    what_moved = client.get("/api/portfolio").json()["what_moved"]
+
+    # AAPL is carried at cost in the totals, but "we couldn't price it" is not the same as
+    # "it went nowhere", so it stays out of the sentence entirely.
+    assert what_moved == "MSFT is your only position that's moved, up $500.00."
+
+
 def test_checkup_of_an_empty_account_says_nothing(client: TestClient) -> None:
     # Nothing held, so there is no honest observation to make and no profile to look up.
     assert client.get("/api/portfolio/checkup").json() == []

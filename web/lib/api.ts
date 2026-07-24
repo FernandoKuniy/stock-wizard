@@ -46,6 +46,10 @@ export type Portfolio = {
   // Holdings we couldn't get a live price for. They're counted in the totals at what they
   // cost, so a flaky quote can't read as a loss the user never took.
   unpriced_symbols: string[];
+  // One sentence naming the position behind the movement, written server-side, null when
+  // nothing has moved. It covers what's held right now, so it deliberately doesn't add up to
+  // total_gain_loss, which also holds money banked from things already sold.
+  what_moved: string | null;
   // Habit badges, earned and still-locked, detected on this same load from the account's own
   // holdings and trades. Rides along on the portfolio payload rather than its own request.
   achievements: Achievement[];

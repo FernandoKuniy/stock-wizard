@@ -326,6 +326,29 @@ The `open-paper-trading-mcp` repo is a working reference for the read-only-tools
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
 
+## What moved your money (M5)
+
+One sentence under the portfolio total naming the position behind the movement ("Your biggest
+gain right now is AAPL, up $3,900.00. NVDA is going the other way, down $610.00."). The
+per-position profit and loss was already a column in the holdings table; this is the plain-
+language framing the product spec asks for, made from figures that already existed.
+
+`services/analysis/movers.py` is pure: `rank` orders the positions by how much money they
+moved in either direction, and `what_moved` composes the sentence. Unpriced positions are
+**dropped, not counted as flat**, since a failed quote means we don't know rather than it
+went nowhere. When one position is at least `DOMINANT_SHARE` of all the movement the copy
+says so outright, otherwise it just names the biggest, and the other side gets named too when
+there is one.
+
+One honesty constraint shapes the copy: these are **unrealized** figures on what is held right
+now, while `total_gain_loss` also contains money banked from things already sold. The two do
+not add up, so no phrasing may claim to explain the total, and a test asserts it. Per-symbol
+realized profit would need a walk over the transactions, which is a bigger feature.
+
+It rides along on `GET /api/portfolio` as `what_moved`, because unlike the check-up it is pure
+math over the snapshot already in hand and costs no provider call. That is the rule for this
+payload: free things ride along, things that spend quota get their own route.
+
 ## Portfolio check-up (M5)
 
 A handful of plain-English observations about how an account's money is spread out. This is

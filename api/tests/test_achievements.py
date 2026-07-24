@@ -249,6 +249,8 @@ def _snapshot(*views: HoldingView) -> PortfolioSnapshot:
         cash_weight=Decimal(0),
         holdings=list(views),
         unpriced_symbols=[],
+        # Not what these tests are about; the movers sentence has its own file.
+        what_moved=None,
     )
 
 

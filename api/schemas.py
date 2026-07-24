@@ -151,6 +151,10 @@ class PortfolioOut(BaseModel):
     # what they cost, so a flaky quote can't quietly shrink the portfolio and read as a
     # loss the user never took. The UI says so rather than pretending the number is fresh.
     unpriced_symbols: list[str]
+    # One sentence naming the position behind the movement, null when nothing has moved.
+    # Unrealized profit and loss on what's held right now, so it deliberately never claims to
+    # explain total_gain_loss, which also contains money banked from things already sold.
+    what_moved: str | None
     # Habit badges, earned and still-locked, detected from this account's own holdings and
     # trades on the same load (no extra provider call). Rides along on the portfolio payload
     # the dashboard already fetches rather than adding a route.
