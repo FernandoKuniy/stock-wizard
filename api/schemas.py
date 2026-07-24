@@ -92,6 +92,32 @@ class WhatIfLegOut(BaseModel):
     gain_loss_percent: float
 
 
+class DayMoveOut(BaseModel):
+    """One notable trading day: how far the price moved, and any headlines from that day.
+
+    ``news`` is empty far more often than not. A day with no headline is the normal case,
+    never an error, and the copy is clear that a move often has no reason you can point at.
+    """
+
+    date: str
+    percent_change: float
+    close: float
+    news: list[NewsItemOut]
+
+
+class BiggestMovesOut(BaseModel):
+    """The handful of days that did most of a stock's moving over the window.
+
+    ``trading_days`` is how many days moved at all, which is the number that makes the point.
+    Either list can be empty: a stock that only ever rose has no down days.
+    """
+
+    symbol: str
+    trading_days: int
+    up: list[DayMoveOut]
+    down: list[DayMoveOut]
+
+
 class SpreadLegOut(BaseModel):
     """The same total money drip-fed monthly instead of all at once.
 

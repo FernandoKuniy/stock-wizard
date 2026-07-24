@@ -35,6 +35,7 @@ from services.analysis.history import (
     trim_to,
 )
 from services.analysis.movers import Mover, what_moved
+from services.analysis.moves import BiggestMoves, biggest_moves
 from services.analysis.portfolio import (
     Position,
     portfolio_total_value,
@@ -47,7 +48,7 @@ from services.analysis.portfolio import (
 from services.analysis.risk import concentration
 from services.analysis.whatif import WhatIf, what_if
 from services.market.candles import Candles
-from services.market.client import CompanyProfile, MarketError, Quote
+from services.market.client import CompanyProfile, MarketError, NewsItem, Quote
 
 _ZERO = Decimal(0)
 _HUNDRED = Decimal(100)
@@ -81,6 +82,12 @@ class ProfileProvider(Protocol):
     """The slice of the market client this layer uses for sectors: a company profile."""
 
     def get_profile(self, symbol: str) -> CompanyProfile: ...
+
+
+class NewsArchiveProvider(Protocol):
+    """The slice of the market client the biggest-moves list uses: headlines by day."""
+
+    def get_news_by_day(self, symbol: str) -> dict[str, list[NewsItem]]: ...
 
 
 @dataclass(frozen=True)
@@ -339,6 +346,38 @@ def build_what_if(
         benchmark_closes=benchmark_closes,
         window_days=window_days,
     )
+
+
+def build_biggest_moves(
+    candles: CandleProvider,
+    symbol: str,
+    *,
+    news: NewsArchiveProvider | None = None,
+    outputsize: int = HISTORY_OUTPUTSIZE,
+) -> tuple[BiggestMoves | None, dict[str, list[NewsItem]]]:
+    """The days that did most of a stock's moving, and any headlines from those days.
+
+    The moves come off the same cached candle window the price chart already fetched, so they
+    cost no provider call. The headlines are strictly best-effort: one archive fetch per
+    symbol, and if it fails or a day has nothing we return the move on its own. A day with no
+    headline is the normal case, not an error, so it must never take the section down.
+    """
+    try:
+        closes = _closes(candles.get_candles(symbol, outputsize=outputsize))
+    except MarketError as exc:
+        raise MissingHistory(symbol) from exc
+
+    moves = biggest_moves(closes)
+    if moves is None or news is None:
+        return moves, {}
+
+    try:
+        archive = news.get_news_by_day(symbol)
+    except MarketError:
+        return moves, {}  # the moves are the point; the headlines are a bonus
+
+    wanted = [move.on.isoformat() for move in moves.up + moves.down]
+    return moves, {day: archive[day] for day in wanted if day in archive}
 
 
 def build_sectors(symbols: Iterable[str], market: ProfileProvider) -> dict[str, str]:

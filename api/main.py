@@ -24,10 +24,12 @@ from models import Account, Holding, Order, Transaction, WatchlistItem
 from schemas import (
     AchievementOut,
     BenchmarkComparisonOut,
+    BiggestMovesOut,
     CandlePointOut,
     CandlesOut,
     CheckupFindingOut,
     CompanyProfileOut,
+    DayMoveOut,
     HistoryPointOut,
     HoldingOut,
     NeverSoldOut,
@@ -51,13 +53,14 @@ from schemas import (
 )
 from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import ValuePoint
-from services.analysis.moves import describe_day_move
+from services.analysis.moves import DayMove, describe_day_move
 from services.analysis.whatif import NotEnoughHistory, SpreadLeg, WhatIfLeg
 from services.market.candles import CandleClient, get_candle_client
 from services.market.client import (
     CompanyProfile,
     MarketClient,
     MarketError,
+    NewsItem,
     Quote,
     get_market_client,
 )
@@ -65,6 +68,7 @@ from services.portfolio import (
     HoldingView,
     MissingHistory,
     PortfolioSnapshot,
+    build_biggest_moves,
     build_checkup,
     build_history,
     build_sectors,
@@ -199,16 +203,34 @@ def read_news(symbol: str, market: MarketDep) -> list[NewsItemOut]:
         items = market.get_company_news(symbol)
     except MarketError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return [
-        NewsItemOut(
-            headline=item.headline,
-            summary=item.summary,
-            source=item.source,
-            url=item.url,
-            date=item.date,
-        )
-        for item in items
-    ]
+    return [_news_out(item) for item in items]
+
+
+@app.get("/api/stock/{symbol}/moves", dependencies=signed_in)
+def read_biggest_moves(symbol: str, candles: CandleDep, market: MarketDep) -> BiggestMovesOut:
+    """The days that did most of this stock's moving, with any headlines from those days.
+
+    The moves come off the same cached candle window the price chart already fetched, so they
+    cost nothing. The headlines are one archive fetch per symbol, held for hours, then sliced
+    in code; asking day by day would have been the only genuinely new provider cost in this
+    milestone. A day with no headline is the normal case and never fails the request.
+    """
+    try:
+        moves, news = build_biggest_moves(candles, symbol, news=market)
+    except MissingHistory as exc:
+        raise HTTPException(
+            status_code=502, detail="Couldn't load the price history for that just now."
+        ) from exc
+
+    upper = symbol.upper()
+    if moves is None:
+        return BiggestMovesOut(symbol=upper, trading_days=0, up=[], down=[])
+    return BiggestMovesOut(
+        symbol=upper,
+        trading_days=moves.trading_days,
+        up=[_day_move_out(move, news) for move in moves.up],
+        down=[_day_move_out(move, news) for move in moves.down],
+    )
 
 
 @app.get("/api/stock/{symbol}/what-if", dependencies=signed_in)
@@ -694,6 +716,26 @@ def _what_if_leg_out(leg: WhatIfLeg) -> WhatIfLegOut:
         value_now=_round2(leg.value_now),
         gain_loss=_round2(leg.gain_loss),
         gain_loss_percent=_round2(leg.gain_loss_percent),
+    )
+
+
+def _day_move_out(move: DayMove, news: dict[str, list[NewsItem]]) -> DayMoveOut:
+    day = move.on.isoformat()
+    return DayMoveOut(
+        date=day,
+        percent_change=_round2(move.percent_change),
+        close=_round2(move.close),
+        news=[_news_out(item) for item in news.get(day, [])],
+    )
+
+
+def _news_out(item: NewsItem) -> NewsItemOut:
+    return NewsItemOut(
+        headline=item.headline,
+        summary=item.summary,
+        source=item.source,
+        url=item.url,
+        date=item.date,
     )
 
 

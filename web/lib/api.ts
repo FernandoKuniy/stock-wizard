@@ -143,6 +143,24 @@ export type NewsItem = {
 export type CandlePoint = { date: string; close: number };
 export type Candles = { symbol: string; points: CandlePoint[] };
 
+// One notable trading day. `news` is empty far more often than not: a day with no headline is
+// the normal case, never an error.
+export type DayMove = {
+  date: string;
+  percent_change: number;
+  close: number;
+  news: NewsItem[];
+};
+
+// The handful of days that did most of a stock's moving. `trading_days` is how many days
+// moved at all, which is the number that makes the point. Either list can be empty.
+export type BiggestMoves = {
+  symbol: string;
+  trading_days: number;
+  up: DayMove[];
+  down: DayMove[];
+};
+
 export type Transaction = {
   id: number;
   symbol: string;
@@ -241,6 +259,11 @@ export const getCandles = (symbol: string, token: Token) =>
 
 export const getNews = (symbol: string, token: Token) =>
   request<NewsItem[]>(`/api/stock/${encodeURIComponent(symbol)}/news`, token);
+
+// The moves come off the cached candle window the price chart already used, so they're free.
+// The headlines are one archive fetch per symbol, cached for hours on the backend.
+export const getBiggestMoves = (symbol: string, token: Token) =>
+  request<BiggestMoves>(`/api/stock/${encodeURIComponent(symbol)}/moves`, token);
 
 // One side of a what-if: what the money bought, and what it's worth at the latest close.
 export type WhatIfLeg = {

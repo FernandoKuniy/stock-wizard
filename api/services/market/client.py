@@ -25,10 +25,16 @@ SEARCH_TTL_SECONDS = 60.0 * 5.0
 # Headlines change through the day but not by the second, so a few minutes of caching keeps
 # the tutor from spending a Finnhub call every time it's asked "why did this move?".
 NEWS_TTL_SECONDS = 60.0 * 10.0
+# A year of back catalogue, on the other hand, is settled: yesterday's headlines don't change.
+# So it's held for hours, the same reasoning that caches daily candles for six.
+ARCHIVE_TTL_SECONDS = 60.0 * 60.0 * 6.0
 MAX_SEARCH_RESULTS = 15
 # How far back to look for company news, and how many of the most recent items to keep.
 NEWS_LOOKBACK_DAYS = 7
 MAX_NEWS_ITEMS = 6
+# How far back the archive reaches. Finnhub's free tier serves about a year of company news,
+# which is exactly the window the biggest-moves list needs.
+ARCHIVE_LOOKBACK_DAYS = 365
 
 
 class MarketError(Exception):
@@ -95,6 +101,7 @@ class MarketClient:
         profile_ttl_seconds: float = PROFILE_TTL_SECONDS,
         search_ttl_seconds: float = SEARCH_TTL_SECONDS,
         news_ttl_seconds: float = NEWS_TTL_SECONDS,
+        archive_ttl_seconds: float = ARCHIVE_TTL_SECONDS,
     ) -> None:
         self._api_key = api_key
         self._client = client or httpx.Client(base_url=base_url, timeout=10.0)
@@ -103,6 +110,9 @@ class MarketClient:
         self._profiles: TtlCache[CompanyProfile] = TtlCache(profile_ttl_seconds)
         self._searches: TtlCache[list[SymbolMatch]] = TtlCache(search_ttl_seconds)
         self._news: TtlCache[list[NewsItem]] = TtlCache(news_ttl_seconds)
+        # Keyed by symbol, never by symbol-and-date: TtlCache never evicts, so a date in the
+        # key would grow the store without bound. One fetch per symbol, sliced in code.
+        self._archive: TtlCache[dict[str, list[NewsItem]]] = TtlCache(archive_ttl_seconds)
 
     def get_quote(self, symbol: str) -> Quote:
         """Return a quote for ``symbol``, served from cache when still fresh."""
@@ -146,6 +156,23 @@ class MarketClient:
         items = self._fetch_news(symbol)
         self._news.set(symbol, items)
         return items
+
+    def get_news_by_day(self, symbol: str) -> dict[str, list[NewsItem]]:
+        """About a year of this symbol's headlines, grouped by the ISO date they ran on.
+
+        One fetch per symbol for the whole window, held for hours, then sliced in code. A call
+        costs the same whether it returns a week or a year, so asking day by day would have
+        been the one genuinely new provider cost in this milestone (see docs/architecture.md);
+        this is the same "fetch the long window once and slice it" rule the candle client
+        follows. Items with no usable date are dropped rather than bucketed under a guess.
+        """
+        symbol = symbol.upper()
+        cached = self._archive.get(symbol)
+        if cached is not None:
+            return cached
+        by_day = self._fetch_news_by_day(symbol)
+        self._archive.set(symbol, by_day)
+        return by_day
 
     def _fetch_quote(self, symbol: str) -> Quote:
         data = self._get("/quote", {"symbol": symbol})
@@ -223,6 +250,26 @@ class MarketClient:
         # Finnhub does not promise an order, so sort newest first before trimming.
         dated.sort(key=lambda pair: pair[0], reverse=True)
         return [item for _, item in dated[:MAX_NEWS_ITEMS]]
+
+    def _fetch_news_by_day(self, symbol: str) -> dict[str, list[NewsItem]]:
+        today = datetime.now(tz=UTC).date()
+        start = today - timedelta(days=ARCHIVE_LOOKBACK_DAYS)
+        params = {"symbol": symbol, "from": start.isoformat(), "to": today.isoformat()}
+        data = self._get("/company-news", params)
+        if not isinstance(data, list):
+            return {}
+        by_day: dict[str, list[NewsItem]] = {}
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            headline = str(entry.get("headline") or "").strip()
+            if not headline:
+                continue
+            item = _news_item(entry, headline)
+            if not item.date:
+                continue  # no usable date means no day to file it under
+            by_day.setdefault(item.date, []).append(item)
+        return by_day
 
     def _get(self, path: str, params: dict[str, str]) -> Any:
         try:

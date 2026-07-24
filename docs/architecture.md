@@ -140,6 +140,16 @@ All external data calls and all caching live here. Nothing else touches a provid
   beginner to always find an explanation teaches them to see patterns that aren't there, so a
   test asserts the note never reaches for "because".
 
+  **The news archive (M5)** is a second, separate fetch: about a year of company news in one
+  call, grouped by day and cached for **six hours**, since yesterday's headlines don't change.
+  It feeds the biggest-moves list. The recent-news fetch above keeps its own 7-day window and
+  ten-minute TTL, because freshness matters there and doesn't here. Two caches over two call
+  shapes, each with a TTL matched to what it serves. The archive is keyed **by symbol only,
+  never by symbol-and-date**: `TtlCache` never evicts, so a date in the key would grow the
+  store without bound. Asking day by day would also have been the one genuinely new provider
+  cost in this milestone; one wide call sliced in code is the same rule the candle client
+  follows.
+
 Both providers sit behind one `MarketError` contract, so no raw provider error reaches the
 user and swapping a provider stays a market-layer change.
 
@@ -361,6 +371,22 @@ the model can ask for figures but can never compute them itself. Built in M3.
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
+
+## The days that did the moving (M5)
+
+`GET /api/stock/{symbol}/moves` lists the three biggest up days and three biggest down days
+in the stock's cached window, out of however many days actually moved. `biggest_moves` in
+`services/analysis/moves.py` computes each day against the previous close we hold, the same
+convention `risk.daily_returns` uses, and skips a zero or negative close rather than emitting
+a nonsense percentage. A stock that only ever rose gets an empty down list rather than padded
+filler.
+
+**The moves cost no provider call**: they read the candle window the price chart already
+fetched. The headlines are strictly best-effort on top, from the news archive above; a failed
+archive fetch returns the moves alone, and a day with no headline is the normal case, not an
+error. This was the read-only slice of the replay idea decisions.md rejected on 2026-07-15:
+most of the lesson (prices move in lumps, and nobody knows which days in advance) without
+building a second simulation engine.
 
 ## What if you'd never sold (M5)
 

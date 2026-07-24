@@ -72,6 +72,11 @@ class FakeMarket:
         self.profile_calls: list[str] = []
         # Today's percent change per symbol, for the big-move note. Flat unless a test says so.
         self.percent_changes: dict[str, float] = {}
+        # The year-of-headlines archive, keyed by ISO date. Empty unless a test fills it, which
+        # is the normal case: most days have no headline and the list must still work.
+        self.archive: dict[str, list[NewsItem]] = {}
+        self.archive_failing: set[str] = set()
+        self.archive_calls: list[str] = []
 
     def get_quote(self, symbol: str) -> Quote:
         symbol = symbol.upper()
@@ -92,6 +97,13 @@ class FakeMarket:
         return CompanyProfile(
             symbol, "Apple Inc", "NASDAQ", "Technology", "", 2.9e12, "A tech company."
         )
+
+    def get_news_by_day(self, symbol: str) -> dict[str, list[NewsItem]]:
+        symbol = symbol.upper()
+        self.archive_calls.append(symbol)
+        if symbol in self.archive_failing:
+            raise MarketError(f"No news available for {symbol}.")
+        return self.archive
 
     def get_company_news(self, symbol: str) -> list[NewsItem]:
         symbol = symbol.upper()
@@ -285,6 +297,63 @@ def test_candles(client: TestClient) -> None:
     points = client.get("/api/stock/AAPL/candles").json()["points"]
     assert [p["date"] for p in points] == [day.isoformat() for day in CHART_DAYS]
     assert [p["close"] for p in points] == CHART_CLOSES["AAPL"]
+
+
+def test_biggest_moves_picks_out_the_days(client: TestClient) -> None:
+    # AAPL ran 100 -> 120 -> 150 over the window, so both days were up and none were down.
+    body = client.get("/api/stock/AAPL/moves").json()
+
+    assert body["symbol"] == "AAPL"
+    assert body["trading_days"] == 2
+    # Biggest first, not newest first: 120 -> 150 is +25%, 100 -> 120 is +20%.
+    assert [day["percent_change"] for day in body["up"]] == [25.0, 20.0]
+    assert [day["date"] for day in body["up"]] == [
+        CHART_DAYS[2].isoformat(),
+        CHART_DAYS[1].isoformat(),
+    ]
+    assert body["down"] == []
+
+
+def test_biggest_moves_attaches_a_headline_when_there_is_one(
+    client: TestClient, market: FakeMarket
+) -> None:
+    market.archive = {
+        CHART_DAYS[2].isoformat(): [
+            NewsItem("AAPL jumps on earnings", "", "Reuters", "https://example.com/x", "")
+        ]
+    }
+
+    body = client.get("/api/stock/AAPL/moves").json()
+
+    on_the_day = next(day for day in body["up"] if day["date"] == CHART_DAYS[2].isoformat())
+    assert on_the_day["news"][0]["headline"] == "AAPL jumps on earnings"
+    # The other day had nothing, which is the normal case and not an error.
+    other = next(day for day in body["up"] if day["date"] == CHART_DAYS[1].isoformat())
+    assert other["news"] == []
+
+
+def test_biggest_moves_still_works_when_the_news_archive_fails(
+    client: TestClient, market: FakeMarket
+) -> None:
+    market.archive_failing.add("AAPL")
+
+    body = client.get("/api/stock/AAPL/moves").json()
+
+    # The moves are the point; the headlines are a bonus and never take the section down.
+    assert body["trading_days"] == 2
+    assert all(day["news"] == [] for day in body["up"])
+
+
+def test_biggest_moves_refuses_without_price_history(
+    client: TestClient, candles: FakeCandles
+) -> None:
+    candles.failing.add("AAPL")
+
+    assert client.get("/api/stock/AAPL/moves").status_code == 502
+
+
+def test_biggest_moves_needs_a_token(anon_client: TestClient) -> None:
+    assert anon_client.get("/api/stock/AAPL/moves").status_code == 401
 
 
 def test_what_if_answers_against_the_index(client: TestClient) -> None:

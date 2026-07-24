@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BiggestMoves as BiggestMovesSection } from "@/components/BiggestMoves";
 import { BigMoveNote } from "@/components/BigMoveNote";
 import { NewsFeed } from "@/components/NewsFeed";
 import { OrderForm } from "@/components/OrderForm";
@@ -8,12 +9,14 @@ import { Term } from "@/components/Term";
 import { TimeMachine } from "@/components/TimeMachine";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import {
+  getBiggestMoves,
   getCandles,
   getNews,
   getPortfolio,
   getStock,
   getWatchlist,
   getWhatIf,
+  type BiggestMoves,
   type CandlePoint,
   type NewsItem,
   type Stock,
@@ -57,6 +60,15 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     news = await getNews(upper, token);
   } catch {
     news = []; // news is a nice-to-have; hide the section rather than break the page
+  }
+
+  // The moves come off the same cached candles the chart above just used. A failure here
+  // hides the section rather than breaking the page.
+  let moves: BiggestMoves | null = null;
+  try {
+    moves = await getBiggestMoves(upper, token);
+  } catch {
+    moves = null;
   }
 
   // Render the default what-if with the page so it's there on arrival. It reads the same
@@ -139,6 +151,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               </div>
             </div>
           )}
+
+          {moves && <BiggestMovesSection moves={moves} />}
 
           <TimeMachine symbol={quote.symbol} initial={whatIf} />
 

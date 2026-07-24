@@ -108,7 +108,7 @@ and adding them to the old single page would have made the chaos worse before it
 - [~] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
 - [~] Monthly-investing comparison in the time machine (lump sum vs the same money spread out).
 - [~] "Why did it move?" news on a big daily change (product-spec has always listed this).
-- [ ] Biggest daily moves of the last year, with that day's headline where we have one.
+- [~] Biggest daily moves of the last year, with that day's headline where we have one.
 - [ ] Calm mode: hide the dollar amounts, keep the plain-English sentence.
 - [ ] Glossary page over the terms we already define on both sides.
 - [ ] Start-here path for a brand new account.
