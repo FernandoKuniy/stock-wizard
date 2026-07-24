@@ -70,13 +70,16 @@ class FakeMarket:
         self.profiles_failing: set[str] = set()
         # Every profile lookup, so a test can prove we don't spend quota we don't need.
         self.profile_calls: list[str] = []
+        # Today's percent change per symbol, for the big-move note. Flat unless a test says so.
+        self.percent_changes: dict[str, float] = {}
 
     def get_quote(self, symbol: str) -> Quote:
         symbol = symbol.upper()
         if symbol in self.failing:
             raise MarketError(f"No quote available for {symbol}.")
         price = self._prices[symbol]
-        return Quote(symbol, price, 0.0, 0.0, price, price, price, price)
+        change = self.percent_changes.get(symbol, 0.0)
+        return Quote(symbol, price, 0.0, change, price, price, price, price)
 
     def search(self, query: str) -> list[SymbolMatch]:
         return [SymbolMatch("AAPL", "APPLE INC", "Common Stock")]
@@ -263,6 +266,19 @@ def test_stock_has_quote_and_profile(client: TestClient) -> None:
     body = client.get("/api/stock/aapl").json()
     assert body["quote"]["price"] == 150.0
     assert body["profile"]["industry"] == "Technology"
+    # Flat on the day, so there is nothing unusual to point at.
+    assert body["big_move"] is None
+
+
+def test_stock_points_at_a_big_day(client: TestClient, market: FakeMarket) -> None:
+    market.percent_changes["AAPL"] = -7.2
+
+    body = client.get("/api/stock/AAPL").json()
+
+    assert body["big_move"] == "AAPL is down 7.2% today, which is a big day for one stock."
+    # It says the move is unusual, never why. The headlines are a separate call and the
+    # reader decides whether they explain anything.
+    assert "because" not in body["big_move"].lower()
 
 
 def test_candles(client: TestClient) -> None:

@@ -130,6 +130,16 @@ All external data calls and all caching live here. Nothing else touches a provid
   and is attributed to its source; the numbers inside a headline are the source's words, not
   our computed figures.
 
+  **The big-move note (M5)** is the "why did this move?" the product spec has always asked
+  for, built honestly. `services/analysis/moves.py` decides in code whether today's change is
+  unusual (at least `BIG_MOVE_PERCENT` in either direction) and composes the sentence, so the
+  figure in "AAPL is down 7.2% today" comes from the analysis layer. It rides on `GET
+  /api/stock/{symbol}` off the quote already in hand, so it costs **no extra provider call**.
+  The copy never claims causation: it says the day is unusual, links down to the headlines,
+  and says outright that plenty of big days have no reason you can point at. Teaching a
+  beginner to always find an explanation teaches them to see patterns that aren't there, so a
+  test asserts the note never reaches for "because".
+
 Both providers sit behind one `MarketError` contract, so no raw provider error reaches the
 user and swapping a provider stays a market-layer change.
 

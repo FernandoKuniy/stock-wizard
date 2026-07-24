@@ -58,8 +58,15 @@ class CompanyProfileOut(BaseModel):
 
 
 class StockOut(BaseModel):
+    """A stock's current price and reference data.
+
+    ``big_move`` is set only when today's change is unusual enough to point at, and it says
+    the move is big, never why. Whether the day's headlines explain it is left to the reader.
+    """
+
     quote: QuoteOut
     profile: CompanyProfileOut | None
+    big_move: str | None
 
 
 class NewsItemOut(BaseModel):

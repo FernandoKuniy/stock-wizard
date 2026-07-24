@@ -10,7 +10,11 @@ export function NewsFeed({ items }: { items: NewsItem[] }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+    // The big-move note links down here, so this needs a target to scroll to.
+    <div
+      id="news"
+      className="scroll-mt-6 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800"
+    >
       <h2 className="text-sm font-medium">Recent news</h2>
       <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
         {items.map((item, i) => {

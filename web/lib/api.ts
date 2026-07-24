@@ -126,7 +126,9 @@ export type CompanyProfile = {
   blurb: string;
 };
 
-export type Stock = { quote: Quote; profile: CompanyProfile | null };
+// `big_move` is set only when today's change is unusual enough to point at. It says the move
+// is big, never why: whether the day's headlines explain it is left to the reader.
+export type Stock = { quote: Quote; profile: CompanyProfile | null; big_move: string | null };
 
 // One recent article about a company. `date` is an ISO date, or "" if the source omitted it.
 // The numbers inside a headline are the source's words, never our computed figures.

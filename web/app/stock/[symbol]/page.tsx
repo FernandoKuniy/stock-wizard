@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BigMoveNote } from "@/components/BigMoveNote";
 import { NewsFeed } from "@/components/NewsFeed";
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
@@ -114,6 +115,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             </div>
             <WatchlistStar symbol={quote.symbol} initialWatched={watched} />
           </div>
+
+          {stock.big_move && <BigMoveNote note={stock.big_move} hasNews={news.length > 0} />}
 
           {candles ? (
             <PriceChart points={candles} />

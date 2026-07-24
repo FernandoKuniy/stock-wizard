@@ -51,6 +51,7 @@ from schemas import (
 )
 from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import ValuePoint
+from services.analysis.moves import describe_day_move
 from services.analysis.whatif import NotEnoughHistory, SpreadLeg, WhatIfLeg
 from services.market.candles import CandleClient, get_candle_client
 from services.market.client import (
@@ -151,7 +152,12 @@ def search_symbols(q: str, market: MarketDep) -> list[SymbolMatchOut]:
 
 @app.get("/api/stock/{symbol}", dependencies=signed_in)
 def read_stock(symbol: str, market: MarketDep) -> StockOut:
-    """Return the current quote and best-effort company profile for a symbol."""
+    """Return the current quote, best-effort company profile, and a note on any big move.
+
+    The big-move note is worked out from the quote we already have, so it costs no extra
+    provider call. It only ever says the move is unusual, never why: the day's headlines sit
+    lower down the page and the reader decides whether they explain anything.
+    """
     try:
         quote = market.get_quote(symbol)
     except MarketError as exc:
@@ -160,7 +166,11 @@ def read_stock(symbol: str, market: MarketDep) -> StockOut:
         profile: CompanyProfileOut | None = _profile_out(market.get_profile(symbol))
     except MarketError:
         profile = None  # the page still works with price and buy/sell
-    return StockOut(quote=_quote_out(quote), profile=profile)
+    return StockOut(
+        quote=_quote_out(quote),
+        profile=profile,
+        big_move=describe_day_move(quote.symbol, Decimal(str(quote.percent_change))),
+    )
 
 
 @app.get("/api/stock/{symbol}/candles", dependencies=signed_in)
