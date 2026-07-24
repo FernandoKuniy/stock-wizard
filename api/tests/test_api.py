@@ -65,6 +65,11 @@ class FakeMarket:
         self._prices = prices or {"AAPL": 150.0, "MSFT": 300.0}
         # Symbols whose quote should blow up, so tests can act out a flaky provider.
         self.failing: set[str] = set()
+        # Profiles fail separately from quotes: the check-up's sector lookup degrades on its
+        # own, and a test shouldn't have to break the price to break the sector.
+        self.profiles_failing: set[str] = set()
+        # Every profile lookup, so a test can prove we don't spend quota we don't need.
+        self.profile_calls: list[str] = []
 
     def get_quote(self, symbol: str) -> Quote:
         symbol = symbol.upper()
@@ -77,8 +82,12 @@ class FakeMarket:
         return [SymbolMatch("AAPL", "APPLE INC", "Common Stock")]
 
     def get_profile(self, symbol: str) -> CompanyProfile:
+        symbol = symbol.upper()
+        self.profile_calls.append(symbol)
+        if symbol in self.profiles_failing:
+            raise MarketError(f"No company profile available for {symbol}.")
         return CompanyProfile(
-            symbol.upper(), "Apple Inc", "NASDAQ", "Technology", "", 2.9e12, "A tech company."
+            symbol, "Apple Inc", "NASDAQ", "Technology", "", 2.9e12, "A tech company."
         )
 
     def get_company_news(self, symbol: str) -> list[NewsItem]:
@@ -443,6 +452,101 @@ def test_history_draws_the_portfolio_against_the_index(
     assert comparison["benchmark_percent"] == 10.0
     # Which means the index is $10,000 ahead. That is the lesson.
     assert comparison["difference"] == -10000.0
+
+
+def test_checkup_of_an_empty_account_says_nothing(client: TestClient) -> None:
+    # Nothing held, so there is no honest observation to make and no profile to look up.
+    assert client.get("/api/portfolio/checkup").json() == []
+
+
+def test_checkup_reads_the_account_it_is_given(client: TestClient) -> None:
+    # Everything into one company: the biggest-position check should light up, and the
+    # cash check should not, since it all got spent.
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "dollars", "value": 90000}
+    )
+
+    found = {row["key"]: row for row in client.get("/api/portfolio/checkup").json()}
+
+    assert found["one_big_position"]["status"] == "notable"
+    assert "AAPL is 100% of what you own" in found["one_big_position"]["detail"]
+    assert found["how_many_companies"]["status"] == "notable"
+    assert found["cash_on_the_sidelines"]["status"] == "ok"
+
+
+def test_checkup_flags_a_pile_of_cash(client: TestClient) -> None:
+    # $1,500 of a $100,000 account invested, so almost all of it is still cash.
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "dollars", "value": 1500}
+    )
+
+    found = {row["key"]: row for row in client.get("/api/portfolio/checkup").json()}
+
+    assert found["cash_on_the_sidelines"]["status"] == "notable"
+    assert "99% of your money is still sitting in cash" in found["cash_on_the_sidelines"]["detail"]
+
+
+def test_checkup_flags_two_companies_in_the_same_industry(client: TestClient) -> None:
+    # The fake market puts everything in Technology, so two holdings are one industry.
+    for symbol in ("AAPL", "MSFT"):
+        client.post(
+            "/api/orders",
+            json={"symbol": symbol, "side": "buy", "mode": "dollars", "value": 10000},
+        )
+
+    found = {row["key"]: row for row in client.get("/api/portfolio/checkup").json()}
+
+    assert found["sector_spread"]["status"] == "notable"
+    assert "one industry, Technology" in found["sector_spread"]["detail"]
+
+
+def test_checkup_says_so_when_it_cannot_look_up_a_sector(
+    client: TestClient, market: FakeMarket
+) -> None:
+    for symbol in ("AAPL", "MSFT"):
+        client.post(
+            "/api/orders",
+            json={"symbol": symbol, "side": "buy", "mode": "dollars", "value": 10000},
+        )
+    market.profiles_failing.update({"AAPL", "MSFT"})
+
+    found = {row["key"]: row for row in client.get("/api/portfolio/checkup").json()}
+
+    # Not knowing is reported as not knowing, never guessed at, and the rest still works:
+    # a failed profile lookup costs the sector check only, not the whole check-up.
+    assert found["sector_spread"]["status"] == "unknown"
+    assert found["how_many_companies"]["detail"] == "You own 2 companies."
+
+
+def test_checkup_spends_no_profile_quota_on_a_single_holding(
+    client: TestClient, market: FakeMarket
+) -> None:
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "dollars", "value": 10000}
+    )
+    market.profile_calls.clear()
+
+    found = {row["key"]: row for row in client.get("/api/portfolio/checkup").json()}
+
+    # One company is trivially all of one industry, so there is nothing to learn and no
+    # reason to spend a call finding out.
+    assert market.profile_calls == []
+    assert "sector_spread" not in found
+
+
+def test_checkup_is_scoped_to_the_signed_in_account(
+    client: TestClient, sams_client: TestClient
+) -> None:
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "dollars", "value": 90000}
+    )
+
+    # Alex is all-in on one company; Sam has bought nothing and must not see Alex's position.
+    assert sams_client.get("/api/portfolio/checkup").json() == []
+
+
+def test_checkup_needs_a_token(anon_client: TestClient) -> None:
+    assert anon_client.get("/api/portfolio/checkup").status_code == 401
 
 
 def test_history_defaults_to_the_whole_account(client: TestClient, db_session: Session) -> None:

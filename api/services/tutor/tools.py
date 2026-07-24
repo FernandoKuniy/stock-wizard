@@ -30,6 +30,7 @@ from services.portfolio import (
     CandleProvider,
     MissingHistory,
     build_history,
+    build_sectors,
     build_snapshot,
 )
 from services.tutor.glossary import define
@@ -327,14 +328,8 @@ def build_tools(
 
 
 def _sectors(rows: Sequence[Holding], market: MarketPort) -> dict[str, str]:
-    """Best-effort sector per held symbol; a symbol whose profile fails is simply left out."""
-    sectors: dict[str, str] = {}
-    for row in rows:
-        try:
-            sectors[row.symbol] = market.get_profile(row.symbol).industry
-        except MarketError:
-            continue
-    return sectors
+    """Best-effort sector per held symbol, shared with the portfolio check-up."""
+    return build_sectors((row.symbol for row in rows), market)
 
 
 def _money(value: Decimal) -> float:

@@ -176,6 +176,21 @@ class BenchmarkComparisonOut(BaseModel):
     benchmark_percent: float
 
 
+class CheckupFindingOut(BaseModel):
+    """One observation about how a portfolio is spread out.
+
+    ``status`` is ``ok``, ``notable`` or ``unknown``. Notable means worth understanding, not
+    wrong: this app explains, it doesn't advise. ``detail`` is composed in code from figures
+    the analysis layer worked out, and ``lesson`` is static copy written by a person.
+    """
+
+    key: str
+    title: str
+    status: str
+    detail: str
+    lesson: str
+
+
 class PortfolioHistoryOut(BaseModel):
     """The performance chart over one stretch of time.
 

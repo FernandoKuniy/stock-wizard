@@ -51,6 +51,21 @@ export type Portfolio = {
   achievements: Achievement[];
 };
 
+// One observation about how your money is spread out. "notable" means worth understanding,
+// not wrong: the app explains, it never advises. "unknown" means we couldn't get the data
+// for that check (today, only a sector lookup that failed).
+export type CheckupStatus = "ok" | "notable" | "unknown";
+
+// `detail` is the sentence with the figure in it and `lesson` is the teaching copy. Both are
+// written server-side; the frontend only lays them out.
+export type CheckupFinding = {
+  key: string;
+  title: string;
+  status: CheckupStatus;
+  detail: string;
+  lesson: string;
+};
+
 export type HistoryPoint = { date: string; portfolio: number; benchmark: number | null };
 
 export type BenchmarkComparison = {
@@ -187,6 +202,11 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
 }
 
 export const getPortfolio = (token: Token) => request<Portfolio>("/api/portfolio", token);
+
+// Its own call rather than riding on the portfolio payload: this one looks up a company
+// profile per holding for the sector split, so only the page that shows it should pay for it.
+export const getCheckup = (token: Token) =>
+  request<CheckupFinding[]>("/api/portfolio/checkup", token);
 
 // Switching periods costs no market-data call: the backend builds the series over the whole
 // account either way, off candles it has already cached, and slices it.

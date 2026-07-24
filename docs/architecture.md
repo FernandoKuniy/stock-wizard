@@ -326,6 +326,46 @@ The `open-paper-trading-mcp` repo is a working reference for the read-only-tools
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
 
+## Portfolio check-up (M5)
+
+A handful of plain-English observations about how an account's money is spread out. This is
+`risk.py` finally reaching the screen: concentration, the biggest holding's weight, the
+effective number of holdings and the sector split were all computed for the tutor in M3 and
+shown nowhere. Split across the usual two layers:
+
+- **The judgement is `services/analysis/checkup.py`** (pure, no DB, no market). `evaluate(
+  PortfolioFacts)` returns an ordered list of `Finding`s from plain facts. Five checks: how
+  much rides on one company, how many companies you own, how evenly it's split (the Herfindahl
+  effective-holdings number), whether you're spread across industries, and how much is still
+  cash. Every threshold is a named constant with the reasoning next to it.
+- **The composition is `build_checkup` in `services/portfolio.py`**, beside the other builders.
+  It shapes an already-built snapshot plus a sector map into the facts and calls `evaluate`.
+
+Two things follow from hard rule #1. The **sentence is composed in code**, not by the model:
+`"AAPL is 62% of what you own"` is built from a figure the analysis layer worked out, the same
+way `market/client.py` composes a company blurb from the provider's own fields. The **lesson**
+behind each check is static copy written by a person.
+
+Hard rule #2 shapes the wording. A check observes, it never prescribes, and the two states are
+`ok` and `notable` rather than good and bad: notable means worth understanding, not wrong. Each
+check is named for what it measures ("How much rides on one company"), never for a verdict on
+the user, the same naming rule the badges follow. A test asserts the copy never reaches for the
+imperative, which is the enforceable form of the rule for this feature.
+
+Unlike the achievements, this gets **its own route** (`GET /api/portfolio/checkup`) rather than
+riding along on `/api/portfolio`. The achievements ride along because they cost no provider
+call; this one does, since the sector split needs a company profile per holding. Profiles cache
+for a day, so across all users it comes to roughly one call per symbol per day, but only the
+page that shows it should pay for it. The lookup is **skipped entirely for an account holding a
+single company**, where there is no split to describe. A profile that fails degrades that one
+check to `unknown` rather than guessing, and if "Unknown" is the largest bucket the check
+reports not-knowing instead of naming it as a sector. `build_sectors` is shared with the
+tutor's `get_concentration` tool so the two can't drift.
+
+In the UI it sits on the Holdings page, above the allocation donut, with each row opening its
+lesson in a native `<details>`. Notable rows are **amber, never red**: red and green mean lost
+and made money everywhere else in this app, and a notable finding is neither.
+
 ## Watchlists (M4)
 
 Symbols the user is tracking without owning. No money is involved, so this is deliberately

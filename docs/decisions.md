@@ -6,6 +6,17 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  The portfolio check-up gets **its own route** (`GET /api/portfolio/checkup`)
+  instead of riding along on `/api/portfolio` the way the achievements do. The achievements ride
+  along *because* they cost no provider call; the check-up's sector split needs a company profile
+  per holding, so the "only fetch what a user is viewing" rule says only the page showing it
+  should pay. Profiles cache 24h, so it comes to about one call per symbol per day across
+  everyone, and the lookup is skipped outright for a single-holding account (one company is
+  trivially all of one industry, which teaches nothing). Its two states are **`ok` and
+  `notable`**, not good and bad: this app explains, so "notable" means worth understanding, never
+  wrong, and a test asserts the copy never reaches for the imperative. The findings render
+  **amber, never red**, since red and green are reserved for money lost and made. A failed
+  profile lookup degrades that one check to `unknown` rather than guessing a sector.
 - 2026-07-22  The performance chart's period selector **rebases each window** rather than just
   zooming the x-axis. Over a shorter stretch the index leg is rebought at whatever the account
   was worth on that stretch's first day, so both lines still start at the same number and "you're

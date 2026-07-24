@@ -54,7 +54,8 @@ below. Splitting it is what lets the overview answer only "how am I doing?".
 - **Overview** (`/`): total value, gain/loss, the performance chart against the S&P 500, a
   three-line strip of what you own, the habit badges, and the reset button. The landing
   screen, and the only one a nervous beginner has to read.
-- **Holdings** (`/holdings`): the allocation donut and the full holdings table.
+- **Holdings** (`/holdings`): the portfolio check-up, the allocation donut, and the full
+  holdings table.
 - **Activity** (`/activity`): waiting limit orders, the watchlist, and the full transaction
   history. (`/transactions` redirects here.)
 

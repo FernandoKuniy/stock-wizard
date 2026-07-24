@@ -26,6 +26,7 @@ from schemas import (
     BenchmarkComparisonOut,
     CandlePointOut,
     CandlesOut,
+    CheckupFindingOut,
     CompanyProfileOut,
     HistoryPointOut,
     HoldingOut,
@@ -61,7 +62,9 @@ from services.portfolio import (
     HoldingView,
     MissingHistory,
     PortfolioSnapshot,
+    build_checkup,
     build_history,
+    build_sectors,
     build_snapshot,
     build_what_if,
 )
@@ -256,6 +259,40 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         unpriced_symbols=snapshot.unpriced_symbols,
         achievements=achievements,
     )
+
+
+@app.get("/api/portfolio/checkup")
+def read_portfolio_checkup(
+    account: AccountDep, session: SessionDep, market: MarketDep
+) -> list[CheckupFindingOut]:
+    """How this account's money is spread out, as plain-English observations.
+
+    Its own route rather than riding along on ``/api/portfolio`` like the achievements do,
+    because unlike them this one *does* spend quota: it looks up a company profile per holding
+    to work out the sector split. Profiles cache for a day, so it comes to roughly one call per
+    symbol per day across everyone, but it should still only be paid for by the page that shows
+    it. The sector lookup is skipped entirely for an account holding a single company, where
+    there is no split to describe.
+
+    Every figure comes from ``services/analysis``; this route composes nothing.
+    """
+    holdings = list(
+        session.scalars(
+            select(Holding).where(Holding.account_id == account.id).order_by(Holding.symbol)
+        )
+    )
+    snapshot = build_snapshot(holdings, account.cash_balance, account.starting_balance, market)
+    sectors = build_sectors((h.symbol for h in holdings), market) if len(holdings) > 1 else {}
+    return [
+        CheckupFindingOut(
+            key=finding.key,
+            title=finding.title,
+            status=finding.status,
+            detail=finding.detail,
+            lesson=finding.lesson,
+        )
+        for finding in build_checkup(snapshot, sectors)
+    ]
 
 
 @app.get("/api/portfolio/history")

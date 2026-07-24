@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { AllocationChart } from "@/components/AllocationChart";
+import { Checkup } from "@/components/Checkup";
+import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
-import { getPortfolio, type Portfolio } from "@/lib/api";
+import { getCheckup, getPortfolio, type CheckupFinding, type Portfolio } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
 
@@ -16,9 +18,11 @@ export const dynamic = "force-dynamic";
  * overview, so coming here to inspect a position doesn't pay for a chart you can't see.
  */
 export default async function HoldingsPage() {
+  const token = await getAccessToken();
+
   let portfolio: Portfolio;
   try {
-    portfolio = await getPortfolio(await getAccessToken());
+    portfolio = await getPortfolio(token);
   } catch (e) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
@@ -27,6 +31,15 @@ export default async function HoldingsPage() {
         </p>
       </main>
     );
+  }
+
+  // The check-up is a read on what's already here, so a failure just hides it rather than
+  // taking the page down with it.
+  let checkup: CheckupFinding[] = [];
+  try {
+    checkup = await getCheckup(token);
+  } catch {
+    checkup = [];
   }
 
   return (
@@ -43,6 +56,13 @@ export default async function HoldingsPage() {
                 wrong.
               </p>
             )}
+            {checkup.length > 0 && (
+              <FirstTimeCallout id="checkup" title="A read on how it's spread">
+                These are just observations about what you own, worked out from your own holdings.
+                Nothing here is telling you to buy or sell anything. Tap one to read why it matters.
+              </FirstTimeCallout>
+            )}
+            <Checkup findings={checkup} />
             <AllocationChart portfolio={portfolio} />
             <HoldingsTable holdings={portfolio.holdings} />
           </>

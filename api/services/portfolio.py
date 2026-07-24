@@ -15,13 +15,15 @@ at each call site.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
 from models import Holding, Transaction
+from services.analysis.checkup import Finding, PortfolioFacts
+from services.analysis.checkup import evaluate as evaluate_checkup
 from services.analysis.history import (
     BenchmarkComparison,
     Trade,
@@ -40,12 +42,15 @@ from services.analysis.portfolio import (
     position_weights,
     total_gain_loss,
 )
+from services.analysis.risk import concentration
 from services.analysis.whatif import WhatIf, what_if
 from services.market.candles import Candles
-from services.market.client import MarketError, Quote
+from services.market.client import CompanyProfile, MarketError, Quote
 
 _ZERO = Decimal(0)
 _HUNDRED = Decimal(100)
+# What risk.py buckets a symbol under when its sector couldn't be looked up.
+_UNKNOWN_SECTOR = "Unknown"
 # About two years of daily bars, the whole cached window (see market/candles.py).
 HISTORY_OUTPUTSIZE = 500
 
@@ -68,6 +73,12 @@ class CandleProvider(Protocol):
     """The slice of the candle client this layer uses: daily bars for a symbol."""
 
     def get_candles(self, symbol: str, *, outputsize: int = ...) -> Candles: ...
+
+
+class ProfileProvider(Protocol):
+    """The slice of the market client this layer uses for sectors: a company profile."""
+
+    def get_profile(self, symbol: str) -> CompanyProfile: ...
 
 
 @dataclass(frozen=True)
@@ -305,6 +316,62 @@ def build_what_if(
         start=start,
         benchmark_symbol=benchmark_symbol,
         benchmark_closes=benchmark_closes,
+    )
+
+
+def build_sectors(symbols: Iterable[str], market: ProfileProvider) -> dict[str, str]:
+    """Best-effort sector per symbol. One whose profile lookup fails is simply left out.
+
+    Profiles are cached for a day in the market layer, so across all users this costs about
+    one call per symbol per day. Callers still only ask for symbols someone is actually
+    looking at, per the "never poll the whole universe" rule.
+    """
+    sectors: dict[str, str] = {}
+    for symbol in symbols:
+        try:
+            sectors[symbol] = market.get_profile(symbol).industry
+        except MarketError:
+            continue
+    return sectors
+
+
+def build_checkup(snapshot: PortfolioSnapshot, sectors: Mapping[str, str]) -> list[Finding]:
+    """Run the portfolio check-up over a snapshot that has already been built.
+
+    Reads no market data of its own: the values come from the snapshot the caller is already
+    holding, and ``sectors`` is whatever ``build_sectors`` managed to look up (empty is fine,
+    the sector check then reports that it doesn't know). The actual judgement is the pure code
+    in ``services/analysis/checkup.py``; all this does is shape the facts for it.
+    """
+    # Value each holding the way the totals do: at its live market value, or at what it cost
+    # when the quote failed. Otherwise a flaky provider would quietly change the weights.
+    values = {
+        view.symbol: (view.market_value if view.market_value is not None else view.cost_basis)
+        for view in snapshot.holdings
+    }
+    signal = concentration(values, sectors or None)
+
+    top_sector: str | None = None
+    top_sector_weight = _ZERO
+    if signal.sector_weights:
+        top_sector = max(signal.sector_weights, key=lambda name: signal.sector_weights[name])
+        top_sector_weight = signal.sector_weights[top_sector]
+        # "Unknown" is the bucket for symbols we couldn't label. If that is the biggest group
+        # we know less than we know, so report not-knowing rather than naming it as a sector.
+        if top_sector == _UNKNOWN_SECTOR:
+            top_sector = None
+            top_sector_weight = _ZERO
+
+    return evaluate_checkup(
+        PortfolioFacts(
+            position_count=signal.position_count,
+            top_symbol=signal.top_symbol,
+            top_weight=signal.top_weight,
+            effective_holdings=signal.effective_holdings,
+            cash_weight=snapshot.cash_weight,
+            top_sector=top_sector,
+            top_sector_weight=top_sector_weight,
+        )
     )
 
 

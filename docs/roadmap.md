@@ -102,7 +102,7 @@ and adding them to the old single page would have made the chaos worse before it
 - [~] Dock the tutor so it's reachable from every page, not just the overview.
 - [~] Period selector on the performance chart (1M / 6M / 1Y / All). No 1D or 1W: short
       windows are what make people trade.
-- [ ] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
+- [~] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
       reason. Surfaces the concentration and sector math `analysis/risk.py` already computes.
 - [ ] "What moved your money": per-position P/L as a ranked sentence, not a table column.
 - [ ] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
