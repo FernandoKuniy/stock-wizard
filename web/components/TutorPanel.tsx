@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Tutor } from "./Tutor";
@@ -66,6 +67,17 @@ export function TutorPanel() {
             </div>
             <div className="min-h-0 flex-1">
               <Tutor />
+            </div>
+            {/* The glossary lives behind the panel rather than in the nav: it's the same
+                "I don't know what that means" moment, and the nav stays at three places. */}
+            <div className="shrink-0 border-t border-zinc-200 px-5 py-2.5 dark:border-zinc-800">
+              <Link
+                href="/glossary"
+                onClick={() => setOpen(false)}
+                className="text-xs text-zinc-500 hover:underline"
+              >
+                Or look a word up in plain English →
+              </Link>
             </div>
           </div>
         </div>

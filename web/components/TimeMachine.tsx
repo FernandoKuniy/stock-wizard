@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { getWhatIf, type WhatIf, type WhatIfPeriod } from "@/lib/api";
 import { formatMoney, formatPercent, formatShortDate } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/client";
+import { Term } from "./Term";
 
 const PERIODS: { value: WhatIfPeriod; label: string; phrase: string }[] = [
   { value: "1m", label: "1 month", phrase: "a month ago" },
@@ -141,9 +142,9 @@ export function TimeMachine({ symbol, initial }: { symbol: string; initial: What
                   it all at once.
                 </p>
                 <p className="mt-1.5 text-xs text-zinc-400">
-                  That&apos;s the same total money, just spread out. It&apos;s called dollar-cost
-                  averaging, and which way it lands depends entirely on whether the price fell
-                  before it rose.
+                  That&apos;s the same total money, just spread out. It&apos;s called{" "}
+                  <Term name="dollar-cost averaging">dollar-cost averaging</Term>, and which way it
+                  lands depends entirely on whether the price fell before it rose.
                 </p>
               </div>
             )}

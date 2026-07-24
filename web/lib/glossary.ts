@@ -56,6 +56,17 @@ export const GLOSSARY = {
 
   volatility:
     "How much a price jumps around. High volatility means big swings in both directions, which is another way of saying you can't count on it in the short run.",
+
+  "dollar-cost averaging":
+    "Putting money in a bit at a time instead of all at once. You end up buying more shares when the price is low and fewer when it's high, without having to guess which is which. It's not automatically better than going all in, it just means the day you happened to buy matters less.",
 } as const;
 
 export type GlossaryTerm = keyof typeof GLOSSARY;
+
+/** The anchor a term gets on the glossary page, so anything can link straight to it. */
+export function slugForTerm(term: string): string {
+  return term
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}

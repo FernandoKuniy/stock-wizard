@@ -61,8 +61,12 @@ below. Splitting it is what lets the overview answer only "how am I doing?".
 
 The AI tutor is not one of the three. It sits in the header on every page and opens in a
 slide-over panel, including on a stock page, which is where "what does market cap mean?"
-actually gets asked. There is deliberately no fourth "Learn" destination, for the reason in
-the next section. The teaching stays where the thing being taught is.
+actually gets asked. `/glossary` hangs off the bottom of that panel: it's the same "I don't
+know what that means" moment, so it doesn't need a nav slot of its own.
+
+There is deliberately no fourth "Learn" destination, for the reason in the next section. The
+glossary is not one: it holds no lessons and no course, only the words the app already uses,
+in one place, so someone can look one up without hunting for the screen that mentions it.
 
 ## Education approach: teach in the flow
 
