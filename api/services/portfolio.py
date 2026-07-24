@@ -310,6 +310,7 @@ def build_what_if(
     *,
     start: date,
     benchmark_symbol: str,
+    window_days: int = 0,
     outputsize: int = HISTORY_OUTPUTSIZE,
 ) -> WhatIf:
     """What a lump sum into ``symbol`` on ``start`` would be worth now, against the index.
@@ -336,6 +337,7 @@ def build_what_if(
         start=start,
         benchmark_symbol=benchmark_symbol,
         benchmark_closes=benchmark_closes,
+        window_days=window_days,
     )
 
 

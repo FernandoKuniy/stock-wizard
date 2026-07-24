@@ -287,6 +287,32 @@ Shares stay exact fractions here rather than rounding down to 6dp the way a real
 this is a hypothetical, not an order, so rounding would only invent a loss the user never
 took. A symbol with no history that far back returns 404 rather than a guess.
 
+#### Spreading it out (M5)
+
+`spread_over` answers the other half of the question: the same total money put in **monthly**
+across the same window instead of all on day one. This is dollar-cost averaging, the single
+most useful idea for someone with a first paycheck, and it is worth showing next to the lump
+sum rather than explained in the abstract.
+
+- An instalment lands every **30 days**, because the whole app already counts a month as 30
+  days (the what-if periods, the holding badges). Introducing calendar-month arithmetic for
+  one feature would make "a month" mean two different things.
+- The count is `window_days // 30`, so a year is 12 instalments and six months is 6. A
+  one-month window gives one, which is just the lump sum again, so **no spread leg is
+  offered** below two.
+- The last instalment is **whatever is left**, tracked against what has actually been spent
+  rather than multiplied back out of `each`. The parts therefore add up to exactly the amount
+  at Decimal's precision however badly it divides, which is what makes "the same money" true
+  rather than nearly true.
+- An instalment that can't be priced **drops the whole leg**. A partial answer over fewer
+  instalments than the label claims would be comparing something other than what it says.
+- It reads the same cached candle window as everything else here, so it costs **no provider
+  call**.
+
+It genuinely lands both ways, which is the point: buying it all early wins whenever the price
+mostly rose, and spreading wins whenever it fell first. Both cases are unit-tested, and the
+copy says which way it went and why rather than recommending a technique.
+
 ## AI tutor layer (`services/tutor/`) — the "words"
 
 An LLM with read-only tool-calling. The tools are thin wrappers over the analysis layer, so

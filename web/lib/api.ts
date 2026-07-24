@@ -251,6 +251,20 @@ export type WhatIfLeg = {
   gain_loss_percent: number;
 };
 
+// The same total money drip-fed monthly instead of all at once. `each` is one instalment;
+// they add up to exactly the amount, so this and the lump sum really are the same money.
+export type SpreadLeg = {
+  symbol: string;
+  instalments: number;
+  each: number;
+  shares: number;
+  first_on: string;
+  last_on: string;
+  value_now: number;
+  gain_loss: number;
+  gain_loss_percent: number;
+};
+
 export type WhatIfPeriod = "1m" | "6m" | "1y" | "2y";
 
 // `benchmark` and `difference` are null when the index couldn't be priced over the same
@@ -262,6 +276,8 @@ export type WhatIf = {
   stock: WhatIfLeg;
   benchmark: WhatIfLeg | null;
   difference: number | null;
+  // Null over a one-month window, which is too short to split into instalments.
+  spread: SpreadLeg | null;
 };
 
 // Served from the same cached candle window the price chart already fetched, so this

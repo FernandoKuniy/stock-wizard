@@ -130,6 +130,24 @@ export function TimeMachine({ symbol, initial }: { symbol: string; initial: What
               </p>
             )}
 
+            {result.spread && (
+              <div className="mt-3 rounded-lg border border-zinc-100 bg-zinc-50/60 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                  Putting in {formatMoney(result.spread.each)} a month instead, over the same{" "}
+                  {result.spread.instalments} months, you&apos;d have{" "}
+                  <span className="font-medium">{formatMoney(result.spread.value_now)}</span>, so{" "}
+                  {formatMoney(Math.abs(result.spread.value_now - result.stock.value_now))}{" "}
+                  {result.spread.value_now >= result.stock.value_now ? "more" : "less"} than buying
+                  it all at once.
+                </p>
+                <p className="mt-1.5 text-xs text-zinc-400">
+                  That&apos;s the same total money, just spread out. It&apos;s called dollar-cost
+                  averaging, and which way it lands depends entirely on whether the price fell
+                  before it rose.
+                </p>
+              </div>
+            )}
+
             <p className="mt-3 text-xs text-zinc-400">
               Bought at {formatMoney(result.stock.buy_price)} on{" "}
               {formatShortDate(result.stock.bought_on)}, valued at the close on{" "}

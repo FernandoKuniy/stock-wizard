@@ -38,6 +38,7 @@ from schemas import (
     PortfolioHistoryOut,
     PortfolioOut,
     QuoteOut,
+    SpreadLegOut,
     StockOut,
     SymbolMatchOut,
     TransactionOut,
@@ -50,7 +51,7 @@ from schemas import (
 )
 from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import ValuePoint
-from services.analysis.whatif import NotEnoughHistory, WhatIfLeg
+from services.analysis.whatif import NotEnoughHistory, SpreadLeg, WhatIfLeg
 from services.market.candles import CandleClient, get_candle_client
 from services.market.client import (
     CompanyProfile,
@@ -213,10 +214,16 @@ def read_what_if(
     its own reads as a nudge to buy, while next to the S&P 500 it teaches the actual lesson.
     Every figure is computed by ``services/analysis/whatif.py``; this route only rounds.
     """
-    start = date.today() - timedelta(days=WHAT_IF_DAYS[period])
+    window_days = WHAT_IF_DAYS[period]
+    start = date.today() - timedelta(days=window_days)
     try:
         result = build_what_if(
-            candles, symbol, amount, start=start, benchmark_symbol=BENCHMARK_SYMBOL
+            candles,
+            symbol,
+            amount,
+            start=start,
+            benchmark_symbol=BENCHMARK_SYMBOL,
+            window_days=window_days,
         )
     except NotEnoughHistory as exc:
         # The stock wasn't trading that far back, so there is no honest answer to give.
@@ -233,6 +240,7 @@ def read_what_if(
         stock=_what_if_leg_out(result.stock),
         benchmark=(_what_if_leg_out(result.benchmark) if result.benchmark is not None else None),
         difference=_round2(result.difference) if result.difference is not None else None,
+        spread=(_spread_leg_out(result.spread) if result.spread is not None else None),
     )
 
 
@@ -673,6 +681,20 @@ def _what_if_leg_out(leg: WhatIfLeg) -> WhatIfLegOut:
         shares=_shares(leg.shares),
         bought_on=leg.bought_on.isoformat(),
         buy_price=_round2(leg.buy_price),
+        value_now=_round2(leg.value_now),
+        gain_loss=_round2(leg.gain_loss),
+        gain_loss_percent=_round2(leg.gain_loss_percent),
+    )
+
+
+def _spread_leg_out(leg: SpreadLeg) -> SpreadLegOut:
+    return SpreadLegOut(
+        symbol=leg.symbol,
+        instalments=leg.instalments,
+        each=_round2(leg.each),
+        shares=_shares(leg.shares),
+        first_on=leg.first_on.isoformat(),
+        last_on=leg.last_on.isoformat(),
         value_now=_round2(leg.value_now),
         gain_loss=_round2(leg.gain_loss),
         gain_loss_percent=_round2(leg.gain_loss_percent),

@@ -85,12 +85,31 @@ class WhatIfLegOut(BaseModel):
     gain_loss_percent: float
 
 
+class SpreadLegOut(BaseModel):
+    """The same total money drip-fed monthly instead of all at once.
+
+    ``each`` is one instalment. The instalments add up to exactly the amount, so this and the
+    lump sum are genuinely the same money over the same window.
+    """
+
+    symbol: str
+    instalments: int
+    each: float
+    shares: float
+    first_on: str
+    last_on: str
+    value_now: float
+    gain_loss: float
+    gain_loss_percent: float
+
+
 class WhatIfOut(BaseModel):
     """A lump sum into one stock, against the same money in the index over the same window.
 
     ``benchmark`` and ``difference`` are null when the index couldn't be priced over the
     same period, in which case the stock's own answer still stands. ``difference`` is
-    positive when the stock beat the index.
+    positive when the stock beat the index. ``spread`` is the same total put in monthly
+    instead, null when the window is too short to split.
     """
 
     amount: float
@@ -99,6 +118,7 @@ class WhatIfOut(BaseModel):
     stock: WhatIfLegOut
     benchmark: WhatIfLegOut | None
     difference: float | None
+    spread: SpreadLegOut | None
 
 
 class CandlePointOut(BaseModel):

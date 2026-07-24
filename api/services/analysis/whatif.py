@@ -19,7 +19,7 @@ the user never actually paid.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from services.analysis.history import Closes
@@ -51,6 +51,32 @@ class WhatIfLeg:
     gain_loss_percent: Decimal
 
 
+# Instalments land every this many days. The whole app already counts a month as 30 days (the
+# what-if periods, the holding badges), so this keeps "monthly" meaning the same thing
+# everywhere rather than introducing calendar-month arithmetic for one feature.
+DAYS_PER_INSTALMENT = 30
+
+
+@dataclass(frozen=True)
+class SpreadLeg:
+    """The same total money, put in a bit at a time instead of all at once.
+
+    ``each`` is one instalment; the last one carries any remainder so the instalments add up
+    to exactly the amount, which is what makes the comparison with the lump sum fair.
+    """
+
+    symbol: str
+    instalments: int
+    each: Decimal
+    shares: Decimal
+    first_on: date
+    last_on: date
+    latest_on: date
+    value_now: Decimal
+    gain_loss: Decimal
+    gain_loss_percent: Decimal
+
+
 @dataclass(frozen=True)
 class WhatIf:
     """A lump sum into one stock, against the same money in the index.
@@ -58,6 +84,9 @@ class WhatIf:
     ``benchmark`` and ``difference`` are ``None`` when the index couldn't be priced. The
     user's own answer still stands on its own; we just can't draw the comparison, which is
     the same treatment the performance chart gives a missing index.
+
+    ``spread`` is the same total drip-fed monthly instead, ``None`` when the window is too
+    short to split or when an instalment couldn't be priced.
     """
 
     amount: Decimal
@@ -65,6 +94,7 @@ class WhatIf:
     benchmark: WhatIfLeg | None
     # Positive means the stock beat the index over the period, in dollars.
     difference: Decimal | None
+    spread: SpreadLeg | None
 
 
 def what_if(
@@ -75,12 +105,16 @@ def what_if(
     start: date,
     benchmark_symbol: str | None = None,
     benchmark_closes: Closes | None = None,
+    window_days: int = 0,
 ) -> WhatIf:
     """What ``amount`` put into ``symbol`` on ``start`` would be worth at the latest close.
 
     Raises ``NotEnoughHistory`` if the stock has no close on or after ``start``: a symbol
     that wasn't trading yet has no honest answer, and guessing one would be worse than
     saying so. A benchmark we can't price is simply left out.
+
+    ``window_days`` is how long the period runs, which is what decides how many monthly
+    instalments the "spread it out" comparison can use. Left at zero there is no spread leg.
     """
     if amount <= _ZERO:
         raise ValueError("Amount must be greater than zero.")
@@ -104,6 +138,68 @@ def what_if(
         stock=stock,
         benchmark=benchmark,
         difference=stock.value_now - benchmark.value_now if benchmark is not None else None,
+        spread=spread_over(amount, symbol, closes, start=start, window_days=window_days),
+    )
+
+
+def spread_over(
+    amount: Decimal,
+    symbol: str,
+    closes: Closes,
+    *,
+    start: date,
+    window_days: int,
+) -> SpreadLeg | None:
+    """The same total money put in monthly instead of all at once, over the same window.
+
+    This is dollar-cost averaging, and it is the single most useful idea for someone with a
+    first paycheck, so it is worth showing next to the lump sum rather than explaining in the
+    abstract. It genuinely comes out both ways: putting it all in early wins whenever the
+    price mostly rose, and spreading wins whenever it fell first, which is what makes this a
+    lesson about timing rather than a technique to recommend.
+
+    Returns ``None`` when the window is too short to split into at least two instalments, or
+    when any one of them can't be priced. A partial answer over fewer instalments than the
+    user was told about would be comparing something other than what the label says.
+    """
+    instalments = window_days // DAYS_PER_INSTALMENT
+    if instalments < 2:
+        return None
+
+    each = amount / instalments
+    shares = _ZERO
+    spent = _ZERO
+    days: list[date] = []
+    for index in range(instalments):
+        # The last instalment is whatever is left rather than another copy of ``each``, so
+        # the parts add up to exactly the amount however badly it divides, and the two sides
+        # really are the same money. Tracking what was actually spent (instead of
+        # multiplying ``each`` back out) keeps that exact at Decimal's precision.
+        part = amount - spent if index == instalments - 1 else each
+        spent += part
+        on = start + timedelta(days=index * DAYS_PER_INSTALMENT)
+        try:
+            bought_on, price = _first_close_on_or_after(closes, on, symbol)
+        except NotEnoughHistory:
+            return None
+        shares += part / price
+        days.append(bought_on)
+
+    latest_on, latest_price = _latest_close(closes, symbol)
+    value_now = shares * latest_price
+    gain_loss = value_now - amount
+
+    return SpreadLeg(
+        symbol=symbol,
+        instalments=instalments,
+        each=each,
+        shares=shares,
+        first_on=days[0],
+        last_on=days[-1],
+        latest_on=latest_on,
+        value_now=value_now,
+        gain_loss=gain_loss,
+        gain_loss_percent=gain_loss / amount * _HUNDRED,
     )
 
 
