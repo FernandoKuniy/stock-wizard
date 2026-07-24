@@ -604,6 +604,47 @@ def test_history_over_a_short_window_is_a_slice(client: TestClient, db_session: 
     assert [point["date"] for point in body["points"]] == [d.isoformat() for d in CHART_DAYS]
 
 
+def test_history_has_no_never_sold_before_you_sell(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+
+    # Never having sold, "what if you'd never sold" is just what happened.
+    assert client.get("/api/portfolio/history").json()["never_sold"] is None
+
+
+def test_history_compares_against_never_selling(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10}
+    )
+    client.post(
+        "/api/orders", json={"symbol": "AAPL", "side": "sell", "mode": "shares", "value": 10}
+    )
+
+    never_sold = client.get("/api/portfolio/history").json()["never_sold"]
+
+    # Bought and sold at today's quote of 150, so the account is flat at 100,000 and holding
+    # would have been worth the same. The point is that the comparison now exists.
+    assert never_sold is not None
+    assert never_sold["value"] == 100000.0
+    assert never_sold["difference"] == 0.0
+
+
+def test_never_sold_is_a_whole_life_question(client: TestClient, db_session: Session) -> None:
+    open_account_on(db_session, client, CHART_DAYS[0])
+    for side in ("buy", "sell"):
+        client.post(
+            "/api/orders", json={"symbol": "AAPL", "side": side, "mode": "shares", "value": 10}
+        )
+
+    # "What if you'd never sold" is about the whole account, so a narrowed window doesn't
+    # answer it rather than answering a different question under the same name.
+    assert client.get("/api/portfolio/history?period=1m").json()["never_sold"] is None
+    assert client.get("/api/portfolio/history").json()["never_sold"] is not None
+
+
 def test_history_rejects_a_period_we_do_not_serve(client: TestClient, db_session: Session) -> None:
     open_account_on(db_session, client, CHART_DAYS[0])
 

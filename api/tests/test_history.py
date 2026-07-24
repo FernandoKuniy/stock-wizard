@@ -14,6 +14,7 @@ from services.analysis.history import (
     ValuePoint,
     benchmark_series,
     compare_to_benchmark,
+    never_sold_series,
     portfolio_value_series,
     trim_to,
 )
@@ -199,6 +200,83 @@ def test_comparison_needs_both_lines() -> None:
     assert compare_to_benchmark(START, points, []) is None
     assert compare_to_benchmark(START, [], points) is None
     assert compare_to_benchmark(Decimal(0), points, points) is None
+
+
+def test_never_sold_has_nothing_to_say_when_nothing_was_sold() -> None:
+    trades = [Trade("AAPL", "buy", d("10"), d("100"), DAYS[0])]
+    prices = {"AAPL": closes({DAYS[0]: "100", DAYS[4]: "150"})}
+
+    # The counterfactual is just what already happened, so there is no comparison to draw.
+    assert never_sold_series(START, trades, prices, DAYS) is None
+
+
+def test_never_sold_holds_what_was_sold() -> None:
+    trades = [
+        Trade("AAPL", "buy", d("10"), d("100"), DAYS[0]),
+        Trade("AAPL", "sell", d("10"), d("110"), DAYS[1]),
+    ]
+    prices = {"AAPL": closes({DAYS[0]: "100", DAYS[1]: "110", DAYS[4]: "200"})}
+
+    real = portfolio_value_series(START, trades, prices, DAYS)
+    held = never_sold_series(START, trades, prices, DAYS)
+    assert held is not None
+
+    # Sold at 110 for a $100 gain, banked. Holding to 200 would have been $1,000 instead.
+    assert real[-1].value == d("100100")
+    assert held[-1].value == d("99000") + d("10") * d("200")
+
+
+def test_never_sold_can_come_out_behind() -> None:
+    trades = [
+        Trade("AAPL", "buy", d("10"), d("100"), DAYS[0]),
+        Trade("AAPL", "sell", d("10"), d("150"), DAYS[1]),
+    ]
+    # Sold near the top; the price then collapsed.
+    prices = {"AAPL": closes({DAYS[0]: "100", DAYS[1]: "150", DAYS[4]: "50"})}
+
+    real = portfolio_value_series(START, trades, prices, DAYS)
+    held = never_sold_series(START, trades, prices, DAYS)
+    assert held is not None
+
+    # Selling was the better call here, which is exactly why this is a fact and not a lesson.
+    assert real[-1].value == d("100500")
+    assert held[-1].value == d("99000") + d("10") * d("50")
+    assert held[-1].value < real[-1].value
+
+
+def test_never_sold_declines_when_the_buys_needed_the_sale_money() -> None:
+    # Buy almost everything, sell it, then buy again with the proceeds. Keeping both buys
+    # would describe a portfolio this account could never have afforded.
+    trades = [
+        Trade("AAPL", "buy", d("900"), d("100"), DAYS[0]),
+        Trade("AAPL", "sell", d("900"), d("110"), DAYS[1]),
+        Trade("MSFT", "buy", d("400"), d("200"), DAYS[2]),
+    ]
+    prices = {
+        "AAPL": closes({DAYS[0]: "100", DAYS[4]: "120"}),
+        "MSFT": closes({DAYS[2]: "200", DAYS[4]: "250"}),
+    }
+
+    assert never_sold_series(START, trades, prices, DAYS) is None
+
+
+def test_never_sold_allows_buys_that_fit_the_starting_cash() -> None:
+    # The same shape, but small enough that the starting balance covers both buys on its own.
+    trades = [
+        Trade("AAPL", "buy", d("10"), d("100"), DAYS[0]),
+        Trade("AAPL", "sell", d("10"), d("110"), DAYS[1]),
+        Trade("MSFT", "buy", d("10"), d("200"), DAYS[2]),
+    ]
+    prices = {
+        "AAPL": closes({DAYS[0]: "100", DAYS[4]: "120"}),
+        "MSFT": closes({DAYS[2]: "200", DAYS[4]: "250"}),
+    }
+
+    held = never_sold_series(START, trades, prices, DAYS)
+    assert held is not None
+
+    # 100,000 - 1,000 - 2,000 = 97,000 cash, plus 10 AAPL at 120 and 10 MSFT at 250.
+    assert held[-1].value == d("97000") + d("10") * d("120") + d("10") * d("250")
 
 
 def test_trim_keeps_everything_without_a_start() -> None:

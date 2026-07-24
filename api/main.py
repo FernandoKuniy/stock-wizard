@@ -30,6 +30,7 @@ from schemas import (
     CompanyProfileOut,
     HistoryPointOut,
     HoldingOut,
+    NeverSoldOut,
     NewsItemOut,
     OrderOut,
     OrderRequest,
@@ -336,6 +337,16 @@ def read_portfolio_history(
     by_date: dict[date, ValuePoint] = {point.on: point for point in history.benchmark}
     comparison = history.comparison
 
+    # Both series end on the same day, so the last points are comparable. Positive means the
+    # selling has worked out so far.
+    never_sold: NeverSoldOut | None = None
+    if history.never_sold and history.portfolio:
+        held = history.never_sold[-1].value
+        never_sold = NeverSoldOut(
+            value=_round2(held),
+            difference=_round2(history.portfolio[-1].value - held),
+        )
+
     return PortfolioHistoryOut(
         starting_balance=_round2(account.starting_balance),
         period=period,
@@ -360,6 +371,7 @@ def read_portfolio_history(
             if comparison is not None
             else None
         ),
+        never_sold=never_sold,
     )
 
 

@@ -326,6 +326,34 @@ The `open-paper-trading-mcp` repo is a working reference for the read-only-tools
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
 strict "code computes, LLM narrates" separation.
 
+## What if you'd never sold (M5)
+
+A second counterfactual next to the benchmark line: what the account would be worth if every
+buy had simply been held. `never_sold_series` in `history.py` is the same replay as
+`portfolio_value_series` with the sells filtered out, so it reuses that tested machinery rather
+than repeating it, and it prices off the closes `build_history` has already fetched. **It costs
+no extra provider call**, which is the only reason it can sit on a route that already pays for
+one candle fetch per symbol ever held.
+
+It declines to answer in two cases rather than inventing a figure:
+
+- **Nothing was ever sold.** The counterfactual is what already happened, so there is nothing
+  to compare.
+- **The buys could not have been paid for without a sale's proceeds.** Selling frees cash that
+  often funds the next buy, so a replay that keeps every buy but drops every sale can describe
+  a portfolio the account could never have afforded. `_affordable` walks the buys against the
+  starting balance and returns `None` if it ever goes short, the same instinct that makes the
+  history refuse to draw a line it cannot price.
+
+It is a **whole-life question**, so it is computed only when no period narrowing is asked for
+and is absent from a windowed response. Answering "what if you'd never sold, over the last
+month" under the same name would be a different question wearing the same label.
+
+The copy is the sensitive part (hard rule #2). It states the difference as a fact in both
+directions, says plainly that it does not mean selling was the wrong call, and notes it says
+nothing about what happens next. Selling before a drop is a real thing and this shows that
+outcome just as often, which is what makes the feature teachable rather than a nudge.
+
 ## What moved your money (M5)
 
 One sentence under the portfolio total naming the position behind the movement ("Your biggest

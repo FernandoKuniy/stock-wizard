@@ -137,6 +137,49 @@ def benchmark_series(
     return points
 
 
+def never_sold_series(
+    starting_balance: Decimal,
+    trades: Sequence[Trade],
+    closes: Mapping[str, Closes],
+    dates: Sequence[date],
+) -> list[ValuePoint] | None:
+    """What the account would be worth if every buy had simply been held.
+
+    The same replay as ``portfolio_value_series`` with the sells left out, so it reuses that
+    machinery rather than repeating it, and it prices off closes the caller has already
+    fetched. It answers a fact about the user's own history, not a suggestion: see the copy
+    rules in the route that renders it.
+
+    Returns ``None`` in the two cases where there is no honest answer:
+
+    - **Nothing was ever sold.** The counterfactual is just what already happened, so there
+      is nothing to say.
+    - **The buys could not have been paid for without a sale's proceeds.** Selling frees cash
+      that often funds the next buy; a replay that keeps every buy but drops the sales can
+      describe a portfolio the account could never have afforded. Valuing that would be
+      inventing a number, so we decline instead, the same instinct that makes the history
+      refuse to draw a line it cannot price.
+    """
+    if not any(trade.side == "sell" for trade in trades):
+        return None
+
+    buys = [trade for trade in trades if trade.side == "buy"]
+    if not _affordable(starting_balance, buys):
+        return None
+
+    return portfolio_value_series(starting_balance, buys, closes, dates)
+
+
+def _affordable(starting_balance: Decimal, buys: Sequence[Trade]) -> bool:
+    """Whether these buys could have been paid for without the proceeds of any sale."""
+    cash = starting_balance
+    for trade in sorted(buys, key=lambda trade: trade.on):
+        cash -= (trade.quantity * trade.price).quantize(_CASH, rounding=ROUND_HALF_UP)
+        if cash < _ZERO:
+            return False
+    return True
+
+
 def trim_to(points: Sequence[ValuePoint], since: date | None) -> list[ValuePoint]:
     """The stretch of ``points`` from ``since`` onward. All of them when ``since`` is None.
 

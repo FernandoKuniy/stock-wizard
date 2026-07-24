@@ -14,6 +14,7 @@ import {
 import { getPortfolioHistory, type HistoryPeriod, type PortfolioHistory } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/client";
+import { NeverSoldNote } from "./NeverSoldNote";
 import { Term } from "./Term";
 
 // Your money is the one with the colour. The market is the neutral line you're measured
@@ -168,6 +169,15 @@ export function PerformanceChart({ initial }: { initial: PortfolioHistory }) {
           <span>The S&P 500 comparison isn&apos;t available right now.</span>
         )}
       </div>
+
+      {/* Whole-life only, and only once something has actually been sold. The backend
+          decides both, so this just renders whatever came back. */}
+      {history.never_sold && points.length > 0 && (
+        <NeverSoldNote
+          never_sold={history.never_sold}
+          actual={points[points.length - 1].portfolio}
+        />
+      )}
     </div>
   );
 }

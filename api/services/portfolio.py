@@ -30,6 +30,7 @@ from services.analysis.history import (
     ValuePoint,
     benchmark_series,
     compare_to_benchmark,
+    never_sold_series,
     portfolio_value_series,
     trim_to,
 )
@@ -215,6 +216,10 @@ class HistoryResult:
     portfolio: list[ValuePoint]
     benchmark: list[ValuePoint]
     comparison: BenchmarkComparison | None
+    # What the account would be worth if every buy had simply been held. Whole-life only, so
+    # it's None on a narrowed window, and also None when nothing was ever sold or when the
+    # buys couldn't have been paid for without a sale's proceeds.
+    never_sold: list[ValuePoint] | None
 
 
 def build_history(
@@ -281,12 +286,20 @@ def build_history(
     benchmark = benchmark_series(baseline, benchmark_closes, window)
     comparison = compare_to_benchmark(baseline, portfolio, benchmark)
 
+    # "What if you'd never sold?" is a question about the whole account, not about a window,
+    # so it's only answered for the full stretch. It reprices off the closes already loaded
+    # above, so it costs no extra provider call.
+    never_sold = (
+        never_sold_series(starting_balance, trades, closes, dates) if since is None else None
+    )
+
     return HistoryResult(
         benchmark_symbol=benchmark_symbol if benchmark else None,
         baseline=baseline,
         portfolio=portfolio,
         benchmark=benchmark,
         comparison=comparison,
+        never_sold=never_sold,
     )
 
 

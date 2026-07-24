@@ -88,6 +88,11 @@ export type HistoryPeriod = "1m" | "6m" | "1y" | "all";
 // `baseline` is where both lines start on this stretch: the starting balance over the
 // account's whole life, or what it was worth on the window's first day over a shorter one.
 // `starting_balance` is always what the account was funded with.
+// What the account would be worth if every buy had simply been held. `difference` is the real
+// portfolio minus this one, so positive means the selling has worked out so far. Null unless
+// the account has actually sold something, on the whole-life view only.
+export type NeverSold = { value: number; difference: number };
+
 export type PortfolioHistory = {
   starting_balance: number;
   period: HistoryPeriod;
@@ -95,6 +100,7 @@ export type PortfolioHistory = {
   benchmark_symbol: string | null;
   points: HistoryPoint[];
   comparison: BenchmarkComparison | null;
+  never_sold: NeverSold | null;
 };
 
 export type SymbolMatch = { symbol: string; description: string; type: string };

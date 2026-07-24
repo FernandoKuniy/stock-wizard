@@ -6,6 +6,17 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-22  "What if you'd never sold" ships as a **fact next to the benchmark line**, not as
+  a lesson. It was the one M5 item flagged as close to advice, and what makes it teachable is
+  that it comes out *both* ways: selling before a drop is real, and the copy states the
+  difference in either direction, says plainly it doesn't mean selling was the wrong call, and
+  notes it says nothing about what happens next. It **declines rather than guesses** in two
+  cases: nothing ever sold (no comparison exists), and buys that couldn't have been paid for
+  without a sale's proceeds (the replay would describe a portfolio the account could never have
+  afforded). It's a **whole-life question only**, absent from a windowed history response,
+  because "what if you'd never sold, over the last month" is a different question under the same
+  name. Computed inside `build_history` off the closes already loaded, so it costs no provider
+  call; a separate builder with its own fetches would have doubled the app's most expensive one.
 - 2026-07-22  The portfolio check-up gets **its own route** (`GET /api/portfolio/checkup`)
   instead of riding along on `/api/portfolio` the way the achievements do. The achievements ride
   along *because* they cost no provider call; the check-up's sector split needs a company profile

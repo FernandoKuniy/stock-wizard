@@ -105,7 +105,7 @@ and adding them to the old single page would have made the chaos worse before it
 - [~] Portfolio check-up: deterministic rules over the snapshot, each with a plain-English
       reason. Surfaces the concentration and sector math `analysis/risk.py` already computes.
 - [~] "What moved your money": per-position P/L as a ranked sentence, not a table column.
-- [ ] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
+- [~] "What if you'd done nothing": the account against buy-and-hold of its own first buys.
 - [ ] Monthly-investing comparison in the time machine (lump sum vs the same money spread out).
 - [ ] "Why did it move?" news on a big daily change (product-spec has always listed this).
 - [ ] Biggest daily moves of the last year, with that day's headline where we have one.

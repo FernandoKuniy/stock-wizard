@@ -195,6 +195,18 @@ class CheckupFindingOut(BaseModel):
     lesson: str
 
 
+class NeverSoldOut(BaseModel):
+    """What the account would be worth if every buy had simply been held.
+
+    ``difference`` is the real portfolio minus this one, so positive means the selling has
+    worked out so far and negative means it hasn't. It is a fact about what already happened,
+    not a verdict: see the copy that renders it.
+    """
+
+    value: float
+    difference: float
+
+
 class PortfolioHistoryOut(BaseModel):
     """The performance chart over one stretch of time.
 
@@ -209,6 +221,9 @@ class PortfolioHistoryOut(BaseModel):
     benchmark_symbol: str | None
     points: list[HistoryPointOut]
     comparison: BenchmarkComparisonOut | None
+    # Only present on the whole-life view, and only for an account that has actually sold
+    # something and could have afforded its buys without the proceeds.
+    never_sold: NeverSoldOut | None
 
 
 class TransactionOut(BaseModel):
