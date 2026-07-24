@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Tutor } from "./Tutor";
 
@@ -15,20 +15,29 @@ import { Tutor } from "./Tutor";
  */
 export function TutorPanel() {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Closing puts focus back where it came from. Without this a keyboard user lands back at
+  // the top of the document and has to tab through the whole header again.
+  const close = useCallback(() => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }, []);
 
   // Escape closes it, the way anything that covers the page should.
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") close();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  }, [open, close]);
 
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Ask the tutor"
@@ -45,7 +54,7 @@ export function TutorPanel() {
           <button
             type="button"
             aria-label="Close the tutor"
-            onClick={() => setOpen(false)}
+            onClick={close}
             className="absolute inset-0 bg-zinc-900/20 backdrop-blur-[1px] dark:bg-zinc-950/50"
           />
           <div
@@ -58,7 +67,7 @@ export function TutorPanel() {
               <h2 className="text-sm font-semibold">Ask the tutor</h2>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 aria-label="Close the tutor"
                 className="rounded-md px-2 py-1 text-lg leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               >
@@ -73,7 +82,7 @@ export function TutorPanel() {
             <div className="shrink-0 border-t border-zinc-200 px-5 py-2.5 dark:border-zinc-800">
               <Link
                 href="/glossary"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 className="text-xs text-zinc-500 hover:underline"
               >
                 Or look a word up in plain English →

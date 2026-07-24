@@ -48,7 +48,13 @@ export function AllocationChart({ portfolio }: { portfolio: Portfolio }) {
     <div className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
       <h2 className="mb-3 text-sm font-medium text-zinc-500">What you&apos;re holding</h2>
       <div className="flex flex-col items-center gap-5 sm:flex-row">
-        <div className="h-48 w-48 shrink-0">
+        {/* Labelled rather than described: the legend beside it already lists every slice
+            and its weight as text. */}
+        <div
+          role="img"
+          aria-label="Donut chart of how your money is split up. The same figures are listed beside it."
+          className="h-48 w-48 shrink-0"
+        >
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

@@ -107,7 +107,17 @@ export function PerformanceChart({ initial }: { initial: PortfolioHistory }) {
 
       {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
 
-      <div className={`mt-4 h-64 w-full ${busy ? "opacity-50" : ""}`}>
+      {/* The chart is a picture of numbers that are already written out above it, so it gets
+          a label rather than being re-described point by point. */}
+      <div
+        role="img"
+        aria-label={
+          hasBenchmark
+            ? "Line chart of what your portfolio has been worth, against the S&P 500 over the same stretch."
+            : "Line chart of what your portfolio has been worth."
+        }
+        className={`mt-4 h-64 w-full ${busy ? "opacity-50" : ""}`}
+      >
         {points.length < 2 ? (
           <p className="text-sm text-zinc-500">
             Your account isn&apos;t old enough for that stretch yet.

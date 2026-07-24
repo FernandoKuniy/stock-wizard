@@ -54,10 +54,14 @@ export function CalmToggle() {
       type="button"
       onClick={toggle}
       aria-pressed={calm}
+      aria-label={calm ? "Show amounts" : "Hide amounts"}
       title={calm ? "Show the amounts again" : "Blur the amounts so you can look without reacting"}
       className="my-1.5 shrink-0 rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 dark:border-zinc-800 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
     >
-      {calm ? "Show amounts" : "Hide amounts"}
+      {/* The full label doesn't fit next to three tabs and the tutor button on a phone, so it
+          drops to one word there. The aria-label above carries the meaning either way. */}
+      <span className="hidden sm:inline">{calm ? "Show amounts" : "Hide amounts"}</span>
+      <span className="sm:hidden">{calm ? "Show" : "Hide"}</span>
     </button>
   );
 }

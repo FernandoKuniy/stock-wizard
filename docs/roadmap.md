@@ -112,7 +112,7 @@ and adding them to the old single page would have made the chaos worse before it
 - [~] Calm mode: hide the dollar amounts, keep the plain-English sentence.
 - [~] Glossary page over the terms we already define on both sides.
 - [~] Start-here path for a brand new account.
-- [ ] Mobile and keyboard pass.
+- [~] Mobile and keyboard pass.
 
 ## Progress log
 
