@@ -77,6 +77,12 @@ Do NOT build a separate "Learn" tab that nobody visits. Weave teaching into the 
 - Short contextual explainers that appear the first time a user hits a new concept, then
   get out of the way.
 - Plain-language money framing everywhere. "You made $240" beats "up 2.4%."
+- A first-run "start here" path on an account that owns nothing: look something up, buy a
+  small piece, then leave it alone. The steps are about **how the app works**, never about
+  what to buy. They name no company, no ticker and no kind of fund, because the app has no
+  opinion on what belongs in a portfolio and pretending otherwise would make it an adviser
+  (hard rule #2). The third step, "then leave it alone for a bit", is the one a trading app
+  would never write, and it's the point.
 
 ## UX principles
 

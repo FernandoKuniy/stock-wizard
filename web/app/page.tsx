@@ -3,6 +3,7 @@ import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
+import { StartHere } from "@/components/StartHere";
 import { TopHoldings } from "@/components/TopHoldings";
 import {
   getPortfolio,
@@ -86,14 +87,7 @@ export default async function Home() {
         {hasHoldings ? (
           <TopHoldings holdings={portfolio.holdings} />
         ) : (
-          <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
-            <p className="text-lg font-medium">
-              You&apos;ve got {formatMoney(portfolio.cash)} to invest.
-            </p>
-            <p className="mt-1 text-sm text-zinc-500">
-              Search for a company up top to see its price and buy some.
-            </p>
-          </div>
+          <StartHere cash={portfolio.cash} />
         )}
 
         <FirstTimeCallout id="achievements" title="Badges for good habits">

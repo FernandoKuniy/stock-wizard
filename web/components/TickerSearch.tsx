@@ -6,6 +6,9 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { searchSymbols, type SymbolMatch } from "@/lib/api";
 import { getAccessToken } from "@/lib/supabase/client";
 
+/** The header search box, so a first-run step can focus it without threading a ref around. */
+export const SEARCH_INPUT_ID = "ticker-search";
+
 export function TickerSearch() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -53,6 +56,9 @@ export function TickerSearch() {
   return (
     <form onSubmit={onSubmit} className="relative">
       <input
+        // A stable id so the first-run steps can put the cursor here, which is the one
+        // piece of hunting a brand new account shouldn't have to do.
+        id={SEARCH_INPUT_ID}
         type="text"
         value={query}
         onChange={(e) => onChange(e.target.value)}
