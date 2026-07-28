@@ -5,9 +5,12 @@ import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
 import { StartHere } from "@/components/StartHere";
 import { TopHoldings } from "@/components/TopHoldings";
+import { redirect } from "next/navigation";
+
 import {
   getPortfolio,
   getPortfolioHistory,
+  isInviteRequired,
   type Portfolio,
   type PortfolioHistory,
 } from "@/lib/api";
@@ -31,6 +34,8 @@ export default async function Home() {
   try {
     portfolio = await getPortfolio(token);
   } catch (e) {
+    // Signed in but not invited yet: send them to redeem their code, not to an error.
+    if (isInviteRequired(e)) redirect("/redeem");
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
         <p className="text-sm text-red-500">

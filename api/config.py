@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # interface (services/tutor), so the model is a config value, never baked into code.
     openai_api_key: str | None = None
     tutor_model: str = "gpt-5.4-nano"
+    # A shared invite code gating account creation. Optional: leave it unset in local
+    # development and the app provisions accounts on first sign-in as before. Set it in a
+    # deployed environment and a signed-in user gets no account (and no access to the
+    # market, tutor, or portfolio routes) until they redeem the code once. This is what
+    # keeps a public demo from being open to every passer-by and bot. See auth.py.
+    signup_code: str | None = None
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.

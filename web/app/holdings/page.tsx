@@ -1,10 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { AllocationChart } from "@/components/AllocationChart";
 import { Checkup } from "@/components/Checkup";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
-import { getCheckup, getPortfolio, type CheckupFinding, type Portfolio } from "@/lib/api";
+import {
+  getCheckup,
+  getPortfolio,
+  isInviteRequired,
+  type CheckupFinding,
+  type Portfolio,
+} from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { getAccessToken } from "@/lib/supabase/server";
 
@@ -24,6 +31,7 @@ export default async function HoldingsPage() {
   try {
     portfolio = await getPortfolio(token);
   } catch (e) {
+    if (isInviteRequired(e)) redirect("/redeem");
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
         <p className="text-sm text-red-500">

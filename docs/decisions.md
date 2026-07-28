@@ -6,6 +6,22 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-28  **Signup is gated by a shared invite code, enforced at the API, not the form.**
+  The app is becoming a public portfolio demo, and an open signup would let any passer-by or
+  bot spend our OpenAI and market-data quota. A code checked only in the signup form would be
+  bypassable, since `supabase.auth.signUp` is a public endpoint reachable with the browser's
+  publishable key; a bypasser would then be auto-provisioned a funded account and full access.
+  So the gate lives at the one chokepoint every route already passes through: `get_current_user`
+  no longer auto-creates a user when `SIGNUP_CODE` is set, it 403s with `invite_required`. A new
+  `POST /api/redeem-invite` (constant-time compare) is the only place an account opens past the
+  gate; `get_or_create_user` was split out from the token check so redeem and the seed script
+  can provision without the gate. The presence of the user row **is** the "invited" marker, so
+  there's no new table or column. Redeeming is idempotent and retryable, so a typo never locks
+  anyone out. `SIGNUP_CODE` is optional: unset (local dev, tests) the gate is off and accounts
+  open on first sign-in as before. The frontend adds an invite field to signup, a `/redeem`
+  screen, and a `GET /api/me` probe so the layout shows the bare header (no search/nav/tutor)
+  until someone is actually let in. This does not touch RLS or the account-scoping boundary; it
+  gates *who gets an account at all*, upstream of both.
 - 2026-07-28  **Closed a live data leak: Supabase's Data API was exposing every table publicly.**
   The 2026-07-14 note said RLS isn't our authorization boundary because we reach Postgres
   directly, not through PostgREST. True for *our* traffic, but it missed that Supabase still

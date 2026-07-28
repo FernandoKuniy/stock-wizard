@@ -7,6 +7,7 @@ JSON. No financial figure is computed here beyond rounding for display.
 
 from __future__ import annotations
 
+import hmac
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal
@@ -16,11 +17,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from auth import get_current_user
+from auth import (
+    AuthIdentity,
+    get_auth_identity,
+    get_current_user,
+    get_or_create_user,
+    get_signup_code,
+)
 from config import get_settings
 from db import get_db
 from deps import get_current_account
-from models import Account, Holding, Order, Transaction, WatchlistItem
+from models import Account, Holding, Order, Transaction, User, WatchlistItem
 from schemas import (
     AchievementOut,
     BenchmarkComparisonOut,
@@ -32,6 +39,7 @@ from schemas import (
     DayMoveOut,
     HistoryPointOut,
     HoldingOut,
+    MeOut,
     NeverSoldOut,
     NewsItemOut,
     OrderOut,
@@ -40,6 +48,8 @@ from schemas import (
     PortfolioHistoryOut,
     PortfolioOut,
     QuoteOut,
+    RedeemInviteOut,
+    RedeemInviteRequest,
     SpreadLegOut,
     StockOut,
     SymbolMatchOut,
@@ -76,6 +86,7 @@ from services.portfolio import (
     build_what_if,
 )
 from services.sim import orders as sim_orders
+from services.sim.accounts import get_or_create_account
 from services.sim.engine import SimError, buy, reset, sell
 from services.tutor.engine import Turn, run_tutor
 from services.tutor.provider import TutorError, TutorProvider, get_tutor_provider
@@ -477,6 +488,55 @@ def read_transactions(account: AccountDep, session: SessionDep) -> list[Transact
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
     )
     return [_txn_out(t) for t in rows]
+
+
+@app.get("/api/me")
+def read_me(
+    identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
+    session: SessionDep,
+) -> MeOut:
+    """Who the caller is, and whether they've redeemed an invite code yet.
+
+    Deliberately built on the bare token identity rather than ``get_current_account``, so it
+    can answer for a signed-in user who hasn't been let past the gate (the only ones who need
+    a different answer). The frontend uses it to show the redeem screen's bare header instead
+    of the full app chrome.
+    """
+    user = session.scalar(select(User).where(User.auth_id == identity.auth_id))
+    return MeOut(email=identity.email, provisioned=user is not None)
+
+
+@app.post("/api/redeem-invite")
+def redeem_invite(
+    body: RedeemInviteRequest,
+    identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
+    session: SessionDep,
+    signup_code: Annotated[str | None, Depends(get_signup_code)],
+) -> RedeemInviteOut:
+    """Trade a valid invite code for a funded account, opening the door to the rest of the app.
+
+    This is the one place account creation happens past the invite gate, so it deliberately
+    depends on the bare token identity rather than ``get_current_account`` (which would 403 a
+    user who hasn't redeemed yet, the very people who need this route).
+
+    A user who already has an account is waved through: redeeming twice is a harmless no-op, so
+    a double submit or a stale tab can never lock anyone out. Otherwise the code must match the
+    configured one, compared in constant time so the endpoint can't be used as a timing oracle.
+    With no code configured the gate is off and any signed-in user is simply provisioned.
+    """
+    existing = session.scalar(select(User).where(User.auth_id == identity.auth_id))
+    if existing is not None:
+        return RedeemInviteOut()
+
+    if signup_code is not None and not hmac.compare_digest(body.code.strip(), signup_code):
+        raise HTTPException(
+            status_code=403, detail="That invite code isn't right. Check it and try again."
+        )
+
+    user = get_or_create_user(session, auth_id=identity.auth_id, email=identity.email)
+    get_or_create_account(session, user, starting_balance=get_settings().starting_balance)
+    session.commit()
+    return RedeemInviteOut()
 
 
 @app.post("/api/account/reset")

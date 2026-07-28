@@ -27,6 +27,12 @@ This is the smallest thing that feels real and useful. Build this first, no AI y
 5. Transaction history.
 6. Reset button. Huge for beginners. Let them wipe the slate and start over with no fear.
 
+Signing up is invite-only for the hosted demo: creating an account takes a shared code, so a
+public URL isn't open to every passer-by and bot spending our AI and market-data quota. It's a
+single extra field on signup (and a small "enter your code" screen if they arrive without one),
+not a real barrier for anyone we've handed the code to. Off by default in local development. See
+architecture.md ("The invite gate") for how it's enforced.
+
 ## Later features (after the core loop feels good)
 
 - Limit orders, introduced as a teaching moment. The first time a user sees them, explain

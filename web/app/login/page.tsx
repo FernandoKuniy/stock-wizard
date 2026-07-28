@@ -50,6 +50,20 @@ export default function LoginPage() {
           />
         </div>
 
+        <div>
+          <label htmlFor="code" className="text-sm text-zinc-500">
+            Invite code
+          </label>
+          <input
+            id="code"
+            name="code"
+            type="text"
+            autoComplete="off"
+            className="mt-1 w-full rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600"
+          />
+          <p className="mt-1 text-xs text-zinc-400">Only needed to create an account.</p>
+        </div>
+
         {state.error && <p className="text-sm text-red-500">{state.error}</p>}
         {state.notice && <p className="text-sm text-zinc-600 dark:text-zinc-400">{state.notice}</p>}
 

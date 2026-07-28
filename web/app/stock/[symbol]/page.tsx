@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { BiggestMoves as BiggestMovesSection } from "@/components/BiggestMoves";
 import { BigMoveNote } from "@/components/BigMoveNote";
@@ -8,6 +9,7 @@ import { PriceChart } from "@/components/PriceChart";
 import { Term } from "@/components/Term";
 import { TimeMachine } from "@/components/TimeMachine";
 import { WatchlistStar } from "@/components/WatchlistStar";
+
 import {
   getBiggestMoves,
   getCandles,
@@ -16,6 +18,7 @@ import {
   getStock,
   getWatchlist,
   getWhatIf,
+  isInviteRequired,
   type BiggestMoves,
   type CandlePoint,
   type NewsItem,
@@ -36,6 +39,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   try {
     stock = await getStock(upper, token);
   } catch (e) {
+    if (isInviteRequired(e)) redirect("/redeem");
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
         <Link href="/" className="text-sm text-zinc-500 hover:underline">

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { OpenOrders } from "@/components/OpenOrders";
 import { TransactionsTable } from "@/components/TransactionsTable";
@@ -6,6 +8,7 @@ import {
   getOrders,
   getTransactions,
   getWatchlist,
+  isInviteRequired,
   type Order,
   type Transaction,
   type WatchlistItem,
@@ -28,7 +31,10 @@ export default async function ActivityPage() {
   let orders: Order[] = [];
   try {
     orders = await getOrders(token);
-  } catch {
+  } catch (e) {
+    // This is the page's first call, so it's where an uninvited user gets caught and sent
+    // to redeem their code instead of seeing three half-empty sections.
+    if (isInviteRequired(e)) redirect("/redeem");
     orders = [];
   }
 

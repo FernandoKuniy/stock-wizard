@@ -335,6 +335,29 @@ class TutorReplyOut(BaseModel):
     reply: str
 
 
+class MeOut(BaseModel):
+    """Who the caller is, and whether they've been let past the invite gate yet.
+
+    ``provisioned`` is false for a signed-in user who hasn't redeemed a code, which is how
+    the frontend decides to show the redeem screen's bare header rather than the full app
+    chrome."""
+
+    email: str
+    provisioned: bool
+
+
+class RedeemInviteRequest(BaseModel):
+    """The invite code a signed-in user offers to unlock their account."""
+
+    code: str
+
+
+class RedeemInviteOut(BaseModel):
+    """The result of redeeming: ``ok`` once the account is open (or already was)."""
+
+    status: Literal["ok"] = "ok"
+
+
 class WatchlistAddRequest(BaseModel):
     """A symbol to start tracking. Validated against a live quote before it's stored, so
     we never save a ticker that doesn't resolve."""

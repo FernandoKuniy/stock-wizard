@@ -13,6 +13,7 @@ to that user's account. See docs/architecture.md.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Any, Protocol
 from uuid import UUID
@@ -40,6 +41,27 @@ def _unauthorized() -> HTTPException:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Sign in to continue.",
         headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+# The machine-readable marker the frontend keys off to send a signed-in but not-yet-invited
+# user to the redeem-code screen. It travels in the error body's ``detail.code``.
+INVITE_REQUIRED = "invite_required"
+
+
+def _invite_required() -> HTTPException:
+    """A 403 telling a signed-in user they still need to redeem an invite code.
+
+    Distinct from 401 (which means "sign in again"): the token is perfectly valid, the
+    person just hasn't been let into this particular app yet. ``detail`` is a small object
+    so the frontend can act on ``code`` while still having a sentence to show.
+    """
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": INVITE_REQUIRED,
+            "message": "You need an invite code to use Stock Wizard.",
+        },
     )
 
 
@@ -98,12 +120,20 @@ BearerDep = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 VerifierDep = Annotated[TokenVerifier, Depends(get_token_verifier)]
 
 
-def get_current_user(
-    credentials: BearerDep,
-    verifier: VerifierDep,
-    session: Annotated[Session, Depends(get_db)],
-) -> User:
-    """Resolve the bearer token to a user row, creating it the first time they sign in."""
+@dataclass(frozen=True)
+class AuthIdentity:
+    """Who a verified token belongs to, before any database row exists for them."""
+
+    auth_id: UUID
+    email: str
+
+
+def get_auth_identity(credentials: BearerDep, verifier: VerifierDep) -> AuthIdentity:
+    """Verify the bearer token and return the identity it carries. No database, no provisioning.
+
+    This is the token check on its own, so the redeem-invite route can know who is asking
+    before deciding whether to open them an account. ``get_current_user`` builds on it.
+    """
     if credentials is None:
         raise _unauthorized()
 
@@ -113,13 +143,44 @@ def get_current_user(
     except (KeyError, ValueError) as exc:
         raise _unauthorized() from exc
 
-    return get_or_create_user(session, auth_id=auth_id, email=str(claims.get("email") or ""))
+    return AuthIdentity(auth_id=auth_id, email=str(claims.get("email") or ""))
+
+
+def get_signup_code() -> str | None:
+    """The invite code gating account creation, or None when the gate is off.
+
+    A dependency (not a bare ``get_settings()`` read) so tests can turn the gate on and
+    off without touching the process environment.
+    """
+    return get_settings().signup_code
+
+
+def get_current_user(
+    identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
+    session: Annotated[Session, Depends(get_db)],
+    signup_code: Annotated[str | None, Depends(get_signup_code)],
+) -> User:
+    """Resolve the verified token to a user row.
+
+    A user who has one is returned. A user who does not is either provisioned on the spot
+    (when no invite code is configured, the local-development default) or refused with a
+    403 telling them to redeem a code first (when the gate is on). Provisioning past the
+    gate happens only in the redeem-invite route, never here.
+    """
+    user = session.scalar(select(User).where(User.auth_id == identity.auth_id))
+    if user is not None:
+        return user
+    if signup_code is not None:
+        raise _invite_required()
+    return get_or_create_user(session, auth_id=identity.auth_id, email=identity.email)
 
 
 def get_or_create_user(session: Session, *, auth_id: UUID, email: str) -> User:
-    """Find the user this token belongs to, or create the row on first sign-in.
+    """Find the user this token belongs to, or create the row.
 
-    Does not commit: the caller owns the transaction boundary, same as the sim layer.
+    The plain provisioning helper, free of the invite gate so the redeem route and the seed
+    script can both use it. Does not commit: the caller owns the transaction boundary, same
+    as the sim layer.
     """
     user = session.scalar(select(User).where(User.auth_id == auth_id))
     if user is None:

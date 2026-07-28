@@ -89,6 +89,40 @@ Supabase Auth owns sign-up, sign-in, and sessions. We own authorization.
   them a user row and a funded account. `seed.py` is now just a manual top-up for an account
   that already exists (`uv run python -m seed --email you@example.com`).
 
+### The invite gate
+
+Signup is gated by a shared invite code so a public demo isn't open to every passer-by and
+bot (which would spend our OpenAI and market-data quota). The gate is enforced at the **API**,
+not the signup form: `supabase.auth.signUp` is a public endpoint anyone can call with the
+browser's publishable key, so a form-only check would be trivially bypassed, and the bypasser
+would then be auto-provisioned a funded account and full access. So the enforcement sits at the
+one chokepoint every `/api` route already passes through:
+
+- `SIGNUP_CODE` (env, optional) turns the gate on. Unset, in local dev and tests, accounts open
+  on first sign-in exactly as before. Set, in any deployed environment, the gate is live.
+- With the gate on, `get_current_user` no longer auto-creates a user row. A signed-in user who
+  has none gets `403` with a machine-readable `{"code": "invite_required"}`, distinct from the
+  `401` that means "sign in again". Token verification was split out into `get_auth_identity`
+  (verify only, no DB) so the redeem route can know who is asking before an account exists.
+- `POST /api/redeem-invite` is the only place an account opens past the gate. It compares the
+  submitted code to `SIGNUP_CODE` in constant time (`hmac.compare_digest`), then provisions the
+  user and their funded account. It depends on `get_auth_identity`, not `get_current_account`
+  (which would 403 the very users who need it). Redeeming is **idempotent** (an existing account
+  is waved through) and **retryable** (a wrong code refuses without locking anyone out), so a
+  typo or a double submit is harmless.
+- The presence of the user row **is** the "invited" marker, so there is no new table or column,
+  and `get_or_create_user` stays a plain provisioning helper (used by redeem and the seed script)
+  with the gate living only on the request path.
+- `GET /api/me` (built on `get_auth_identity`, so it answers for not-yet-invited users too)
+  reports `{email, provisioned}`. The frontend layout uses it to show the redeem screen's bare
+  header rather than the full app chrome for someone who is signed in but not yet let in.
+
+This is upstream of, and independent from, the account-scoping boundary below: scoping keeps one
+account's money out of another's; the gate decides who gets an account at all. Frontend: an
+invite field on signup redeems in the same step when email confirmation is off, a `/redeem`
+screen handles the retry and the email-confirmation path, and pages send an `invite_required`
+error to `/redeem` instead of showing it.
+
 **IMPORTANT: Supabase Row Level Security is not our authorization boundary.** We reach Postgres
 over a direct connection (the session pooler), not through PostgREST, so RLS never runs on our
 own queries. Authorization lives entirely in the API layer: a request resolves to exactly one

@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from auth import get_token_verifier
+from auth import get_signup_code, get_token_verifier
 from db import get_db
 from main import _round2, app
 from models import Account
@@ -243,6 +243,78 @@ def test_account_routes_require_a_token(anon_client: TestClient, method: str, pa
 def test_a_bad_token_is_rejected(overrides: None) -> None:
     impostor = TestClient(app, headers={"Authorization": "Bearer made-up"})
     assert impostor.get("/api/portfolio").status_code == 401
+
+
+# --- the invite gate ---------------------------------------------------------------------
+# By default (every test above) no code is configured, so accounts open on first sign-in.
+# These turn the gate on and prove a signed-in user can't touch the app until they redeem.
+
+INVITE_CODE = "s3cret-invite-code"
+
+
+@pytest.fixture
+def gated(overrides: None) -> str:
+    """Turn the invite gate on for one test. ``overrides`` clears it again at teardown."""
+    app.dependency_overrides[get_signup_code] = lambda: INVITE_CODE
+    return INVITE_CODE
+
+
+def _alex() -> TestClient:
+    return TestClient(app, headers={"Authorization": f"Bearer {TOKEN_ALEX}"})
+
+
+def test_gate_blocks_a_signed_in_but_uninvited_user(gated: str) -> None:
+    resp = _alex().get("/api/portfolio")
+    assert resp.status_code == 403
+    # A machine-readable marker the frontend keys off to show the redeem screen. Distinct
+    # from a 401, which would mean "your session ran out", not "you were never let in".
+    assert resp.json()["detail"]["code"] == "invite_required"
+
+
+def test_gate_covers_the_whole_app_not_just_account_routes(gated: str) -> None:
+    # "Interact with the app" includes the routes that spend our quota and our tutor spend,
+    # so a market-data call and a tutor call are gated too, not only the money routes.
+    alex = _alex()
+    assert alex.get("/api/quote/AAPL").status_code == 403
+    assert (
+        alex.post("/api/tutor", json={"messages": [{"role": "user", "content": "hi"}]}).status_code
+        == 403
+    )
+
+
+def test_redeeming_the_right_code_opens_a_funded_account(gated: str) -> None:
+    alex = _alex()
+    assert alex.get("/api/portfolio").status_code == 403
+
+    redeemed = alex.post("/api/redeem-invite", json={"code": gated})
+    assert redeemed.status_code == 200
+    assert redeemed.json() == {"status": "ok"}
+
+    portfolio = alex.get("/api/portfolio").json()
+    assert portfolio["cash"] == 100000.0
+    assert portfolio["starting_balance"] == 100000.0
+
+
+def test_a_wrong_code_is_refused_and_stays_retryable(gated: str) -> None:
+    alex = _alex()
+    assert alex.post("/api/redeem-invite", json={"code": "not-it"}).status_code == 403
+    # A typo doesn't lock anyone out: they're simply still uninvited and can try again.
+    assert alex.get("/api/portfolio").status_code == 403
+    assert alex.post("/api/redeem-invite", json={"code": gated}).status_code == 200
+    assert alex.get("/api/portfolio").status_code == 200
+
+
+def test_redeeming_twice_is_a_harmless_no_op(gated: str) -> None:
+    alex = _alex()
+    assert alex.post("/api/redeem-invite", json={"code": gated}).status_code == 200
+    # Already in, so a second redeem (even a stale one with the wrong code) never locks
+    # them back out. A double submit or a re-opened tab is safe.
+    assert alex.post("/api/redeem-invite", json={"code": "stale"}).status_code == 200
+    assert alex.get("/api/portfolio").status_code == 200
+
+
+def test_redeeming_needs_a_token(gated: str) -> None:
+    assert TestClient(app).post("/api/redeem-invite", json={"code": gated}).status_code == 401
 
 
 def test_first_sign_in_opens_a_funded_account(client: TestClient) -> None:

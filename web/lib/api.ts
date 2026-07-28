@@ -202,6 +202,28 @@ export type OrderInput = {
   limit_price?: number;
 };
 
+// An error from the backend that keeps the HTTP status and, when the backend sent one, a
+// machine-readable `code`. The code is how the frontend tells apart cases that look alike as
+// prose but need different handling, like "you need an invite code" versus a plain failure.
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// True when the backend refused because the signed-in user hasn't redeemed an invite code
+// yet. The gate lives on the server (see api/auth.py), so this is how a page learns to send
+// them to the redeem screen instead of showing an error.
+export function isInviteRequired(e: unknown): boolean {
+  return e instanceof ApiError && e.code === "invite_required";
+}
+
 async function request<T>(path: string, token: Token, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     // Always hit the backend: balances and prices must be live, never cached.
@@ -214,22 +236,47 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
   });
 
   if (!res.ok) {
-    if (res.status === 401) throw new Error("Your session ran out. Sign in again.");
+    if (res.status === 401) throw new ApiError("Your session ran out. Sign in again.", 401);
 
-    let detail = `Something went wrong (${res.status}).`;
+    let message = `Something went wrong (${res.status}).`;
+    let code: string | undefined;
     try {
       const body = await res.json();
-      if (typeof body?.detail === "string") detail = body.detail;
+      const detail = body?.detail;
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (detail && typeof detail === "object") {
+        // A structured error: a machine-readable `code` plus a human `message` (the invite
+        // gate is the one that sends this shape today).
+        if (typeof detail.message === "string") message = detail.message;
+        if (typeof detail.code === "string") code = detail.code;
+      }
     } catch {
       // no JSON body; keep the status-based message
     }
-    throw new Error(detail);
+    throw new ApiError(message, res.status, code);
   }
 
   // A 204 (e.g. a DELETE) carries no body, so don't try to parse one.
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+// Who the signed-in user is, and whether they've redeemed an invite code. `provisioned` is
+// false for someone who is signed in but hasn't been let past the gate yet.
+export type Me = { email: string; provisioned: boolean };
+
+// Answers even for a not-yet-invited user (it doesn't go through the account gate), so the
+// layout can tell "signed in" from "actually let in" and pick the right header.
+export const getMe = (token: Token) => request<Me>("/api/me", token);
+
+// Trade a valid invite code for a funded account. Redeeming when already provisioned is a
+// harmless no-op, so a retry or a stale tab can't lock anyone out.
+export const redeemInvite = (code: string, token: Token) =>
+  request<{ status: string }>("/api/redeem-invite", token, {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
 
 export const getPortfolio = (token: Token) => request<Portfolio>("/api/portfolio", token);
 

@@ -6,7 +6,8 @@ import { CalmToggle } from "@/components/CalmToggle";
 import { Nav } from "@/components/Nav";
 import { TickerSearch } from "@/components/TickerSearch";
 import { TutorPanel } from "@/components/TutorPanel";
-import { getUser } from "@/lib/supabase/server";
+import { getMe } from "@/lib/api";
+import { getAccessToken, getUser } from "@/lib/supabase/server";
 import { signOut } from "./login/actions";
 import "./globals.css";
 
@@ -35,6 +36,19 @@ export default async function RootLayout({
   // just the wordmark. No search box, no nav, nothing to sign out of.
   const user = await getUser();
 
+  // A signed-in user who hasn't redeemed an invite code yet is on the redeem screen, which
+  // should look as bare as the login screen: wordmark and a way out, but none of the app's
+  // search, nav, or tutor. `provisioned` is what tells the two apart. If the probe fails we
+  // fall back to hiding the chrome, since it wouldn't work without an account anyway.
+  let provisioned = false;
+  if (user) {
+    try {
+      provisioned = (await getMe(await getAccessToken())).provisioned;
+    } catch {
+      provisioned = false;
+    }
+  }
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <head>
@@ -54,23 +68,27 @@ export default async function RootLayout({
             <Link href="/" className="font-semibold tracking-tight whitespace-nowrap">
               Stock Wizard
             </Link>
+            {/* Search only makes sense once you're in. Keep the spacer either way so Sign
+                out stays pinned to the right. */}
+            {provisioned ? (
+              <div className="flex-1">
+                <TickerSearch />
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
             {user && (
-              <>
-                <div className="flex-1">
-                  <TickerSearch />
-                </div>
-                <form action={signOut}>
-                  <button
-                    type="submit"
-                    className="text-sm whitespace-nowrap text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                  >
-                    Sign out
-                  </button>
-                </form>
-              </>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="text-sm whitespace-nowrap text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  Sign out
+                </button>
+              </form>
             )}
           </div>
-          {user && (
+          {provisioned && (
             <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-6">
               <Nav />
               <div className="flex items-center gap-2">
