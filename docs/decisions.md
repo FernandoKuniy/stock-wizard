@@ -6,6 +6,19 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-07-28  **Closed a live data leak: Supabase's Data API was exposing every table publicly.**
+  The 2026-07-14 note said RLS isn't our authorization boundary because we reach Postgres
+  directly, not through PostgREST. True for *our* traffic, but it missed that Supabase still
+  stands up an auto-generated PostgREST **Data API** over the `public` schema, reachable with
+  the publishable key we ship to the browser. With RLS off and default grants, that API let
+  anyone read (and write) `users`, `accounts`, `holdings`, `transactions`, `orders`,
+  `watchlist_items` and `achievements`, straight past the API's account scoping. Confirmed by
+  pulling real rows anonymously. Two fixes, both applied: **disable the Data API** in project
+  settings (the primary fix, since nothing we run uses PostgREST), and migration `0006` enables
+  **RLS with no policies** on every table as belt-and-suspenders. RLS is safe for us because our
+  connection is the `postgres` role, which owns the tables and has `BYPASSRLS`, so our own
+  queries are unaffected while the `anon`/`authenticated` PostgREST roles are denied by default.
+  The frontend uses Supabase only for auth and never queries a table, so neither fix touches it.
 - 2026-07-22  Calm mode is implemented as a **CSS blur off a `data-calm` attribute on `<html>`**,
   not as React state. A context would have forced `PortfolioSummary`, `TopHoldings` and
   `HoldingsTable` to become client components purely to read a display preference, and the

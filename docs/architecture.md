@@ -89,13 +89,32 @@ Supabase Auth owns sign-up, sign-in, and sessions. We own authorization.
   them a user row and a funded account. `seed.py` is now just a manual top-up for an account
   that already exists (`uv run python -m seed --email you@example.com`).
 
-**IMPORTANT: Supabase Row Level Security does not protect these tables.** We reach Postgres
-over a direct connection (the session pooler), not through PostgREST, so RLS never runs.
-Authorization lives entirely in the API layer: a request resolves to exactly one account, and
-every query is scoped to it. If a route ever reads a table without scoping to
+**IMPORTANT: Supabase Row Level Security is not our authorization boundary.** We reach Postgres
+over a direct connection (the session pooler), not through PostgREST, so RLS never runs on our
+own queries. Authorization lives entirely in the API layer: a request resolves to exactly one
+account, and every query is scoped to it. If a route ever reads a table without scoping to
 `get_current_account`, that is a data leak, and nothing in the database will stop it. A test
 in `tests/test_api.py` holds the line by proving one user's trades never appear in another's
 portfolio.
+
+**But RLS still has to be ON, because Supabase's Data API is a second door.** Separately from
+our API, Supabase auto-generates a PostgREST **Data API** over the `public` schema, reachable
+from anywhere with the publishable key we ship to the browser. That path never touches our
+FastAPI, so our account scoping does nothing for it. Left at Supabase's defaults (Data API on,
+RLS off, `anon`/`authenticated` granted the tables), it exposes every row publicly. Two things
+keep it shut, and both must stay in place:
+
+- The Data API is **disabled** in project settings (Project Settings -> Data API, exposed
+  schemas set to none). Nothing we run uses PostgREST, so this closes the whole surface.
+- Migration `0006` enables **RLS with no policies** on every account table, as defense in depth
+  if the Data API is ever turned back on. An empty policy set denies the PostgREST roles by
+  default. It does not affect us: our connection is the `postgres` role, which owns the tables
+  and has `BYPASSRLS`, so our queries run unchanged. New tables must do the same (`ALTER TABLE
+  ... ENABLE ROW LEVEL SECURITY` in their migration). See decisions.md, 2026-07-28.
+
+Everything under `/api` requires a token, including the market-data routes: they do not touch
+an account, but they do spend our Finnhub and Twelve Data quota. `/health` is the only open
+endpoint.
 
 Everything under `/api` requires a token, including the market-data routes: they do not touch
 an account, but they do spend our Finnhub and Twelve Data quota. `/health` is the only open
