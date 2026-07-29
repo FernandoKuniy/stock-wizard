@@ -150,9 +150,11 @@ def get_signup_code() -> str | None:
     """The invite code gating account creation, or None when the gate is off.
 
     A dependency (not a bare ``get_settings()`` read) so tests can turn the gate on and
-    off without touching the process environment.
+    off without touching the process environment. An empty or whitespace value counts as
+    unset, so ``SIGNUP_CODE=`` means "gate off" rather than "the code is the empty string".
     """
-    return get_settings().signup_code
+    code = (get_settings().signup_code or "").strip()
+    return code or None
 
 
 def get_current_user(

@@ -17,6 +17,11 @@ from models import Base
 os.environ.setdefault("FINNHUB_API_KEY", "test-key")
 os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/stockwiz_test")
 os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
+# Force the invite gate off for the whole suite, so tests don't inherit a real SIGNUP_CODE
+# from the developer's local .env (which pydantic reads). Set here, not setdefault, so a
+# local value can't leak in and turn the gate on under every test. The tests that exercise
+# the gate turn it on explicitly by overriding get_signup_code.
+os.environ["SIGNUP_CODE"] = ""
 
 
 @pytest.fixture
