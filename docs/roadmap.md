@@ -114,8 +114,89 @@ and adding them to the old single page would have made the chaos worse before it
 - [x] Start-here path for a brand new account.
 - [x] Mobile and keyboard pass. **M5 code complete**
 
+## M6. Ship it as a portfolio demo
+
+M5 finished the product. M6 doesn't add features; it makes the app something you can hand to a
+recruiter: deployed, cheap and safe to leave running, and a repo that reads well on the first
+click. Security first, then the demo experience, then repo polish, then deploy. What we leave
+out matters as much as what we build (see non-goals).
+
+Done already (the pre-launch hardening that kicked this off):
+
+- [x] Enable RLS on every table and turn off the public Supabase Data API, closing a live leak
+      that served every row to anyone with the browser publishable key.
+- [x] Gate signup behind a shared invite code, enforced at the API, so a public URL isn't open
+      to every passer-by and bot spending our AI and market-data quota.
+- [x] Manually verify the signed-in click-through (sign in, search, buy, see it on the
+      overview), the step pending since M3.
+
+Safety and cost:
+
+- [ ] Set a hard OpenAI spend cap at the billing level (dashboard, manual), so a runaway can't
+      run up an unbounded bill.
+- [ ] A light per-account throttle on the tutor endpoint, so one account (or a leaked invite
+      code) can't loop the tutor and drive up the OpenAI bill.
+
+The demo experience:
+
+- [ ] Auto-seed every new account with the backdated six-month sample portfolio (`seed --history`
+      logic wired into account creation), so the benchmark line, what-if, check-up and never-sold
+      all teach from the first screen. Carry a clear "this is a sample, hit reset to start your
+      own" banner; reset reveals the empty-state "start here" onboarding from M5. Watch Twelve
+      Data quota: seeding buys five symbols at historical closes.
+- [ ] Error boundaries: `error.tsx`, `not-found.tsx`, `loading.tsx` in the app's calm tone, so a
+      prod hiccup never shows Next's default crash screen.
+- [ ] A "simulation, not advice" line in the footer on every page.
+
+Repo polish (the code is the deliverable):
+
+- [ ] Split `main.py` (about 30KB, 20 routes) into `APIRouter`s by domain (stock, portfolio,
+      orders, watchlist, tutor, account). Pure refactor, no behaviour change, covered by the
+      existing tests.
+- [ ] README as a landing page: the live URL and how to get in, screenshots or a short GIF, the
+      architecture summary, a "Known limitations" section, and a "Security" note pointing at the
+      decision log.
+- [ ] A LICENSE file.
+- [ ] Write "Known limitations" honestly rather than building around it: no stock-split or
+      dividend handling, market orders fill at the last close outside market hours, limit orders
+      sweep on page load. Deliberate scope calls, and saying so shows judgement.
+
+Deploy (Vercel for `web/`, Render for `api/`):
+
+- [ ] Set every env var in both hosts, including `SIGNUP_CODE` on Render and the Twelve Data key
+      (the auto-seed needs it).
+- [ ] Point Supabase Auth's Site URL and redirect URLs at the deployed domain, or confirmation
+      and reset emails link to localhost.
+- [ ] Allow the deployed Vercel origin through CORS (a single localhost origin today).
+- [ ] Run `alembic upgrade head` as a Render pre-deploy step.
+- [ ] Keep-warm: a scheduled ping so the free Supabase project doesn't pause after 7 days idle
+      and the api isn't cold on every visit.
+- [ ] Smoke-test a real invite signup on the deployed environment end to end.
+
+Explicit non-goals for this milestone (a portfolio demo, not a public product):
+
+- Custom SMTP for email deliverability (invite-only, low volume).
+- Legal pages (terms, privacy) beyond the footer disclaimer.
+- Account deletion and data export.
+- Rate-limiting infrastructure like Redis; the invite gate plus the spend cap and light throttle
+  are enough.
+- Error tracking (Sentry) and a password-reset flow: considered and deferred, not worth the setup
+  for an invite-only demo.
+
 ## Progress log
 
+- 2026-07-28  M6 opened (ship it as a portfolio demo), and the security hardening that started
+  it is done. **Enabled RLS on every table and closed the public Supabase Data API**, which was
+  serving every row (emails, balances, transactions) to anyone with the browser publishable key;
+  confirmed anonymous reads returned real data before and `[]` after. Then **gated signup behind
+  a shared invite code**, enforced at the API rather than the form (the form is bypassable via
+  Supabase's public signup endpoint): `get_current_user` 403s `invite_required` until a code is
+  redeemed at `POST /api/redeem-invite`, and the user row's existence is the "invited" marker, so
+  no new table. The signed-in click-through was manually verified. 319 backend tests green (5 new
+  for the gate); web builds clean. Remaining M6 is the tutor throttle and OpenAI billing cap,
+  auto-seeding new accounts with sample history, error boundaries and a footer disclaimer, the
+  `main.py` APIRouter split, README/LICENSE polish, and the Vercel + Render deploy. Implementation
+  order: safety and cost, demo experience, repo polish, deploy.
 - 2026-07-24  M5 code complete, in thirteen commits. The dashboard was one page doing five
   jobs, which contradicted both stated UX principles, so it **split into three routes**
   (Overview / Holdings / Activity) with the tutor docked in a slide-over reachable from every
