@@ -28,6 +28,7 @@ from config import get_settings
 from db import get_db
 from deps import get_current_account
 from models import Account, Holding, Order, Transaction, User, WatchlistItem
+from ratelimit import RateLimiter
 from schemas import (
     AchievementOut,
     BenchmarkComparisonOut,
@@ -136,6 +137,27 @@ HistoryPeriod = Literal["1m", "6m", "1y", "all"]
 # and Twelve Data quota, so they're for signed-in users only. Everything under /api
 # needs a token; /health is the only open door.
 signed_in = [Depends(get_current_user)]
+
+# A light per-account throttle on the tutor, the one route that costs us real money per call.
+# In-memory and per-process (see ratelimit.py), built from config once at startup.
+_tutor_limiter = RateLimiter(max_calls=get_settings().tutor_rate_limit_per_minute, per_seconds=60)
+
+
+def get_tutor_limiter() -> RateLimiter:
+    """The process-wide tutor limiter. A dependency so a test can swap it out."""
+    return _tutor_limiter
+
+
+def enforce_tutor_rate_limit(
+    account: AccountDep,
+    limiter: Annotated[RateLimiter, Depends(get_tutor_limiter)],
+) -> None:
+    """Refuse a tutor call with 429 once an account is over its per-minute budget."""
+    if not limiter.allow(str(account.id)):
+        raise HTTPException(
+            status_code=429,
+            detail="You're asking a lot at once. Give it a minute, then try again.",
+        )
 
 
 @app.get("/health")
@@ -610,7 +632,7 @@ def remove_from_watchlist(symbol: str, account: AccountDep, session: SessionDep)
     session.commit()
 
 
-@app.post("/api/tutor")
+@app.post("/api/tutor", dependencies=[Depends(enforce_tutor_rate_limit)])
 def ask_tutor(
     body: TutorRequest,
     account: AccountDep,

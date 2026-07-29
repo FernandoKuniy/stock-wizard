@@ -26,8 +26,9 @@ from sqlalchemy.orm import Session
 
 from auth import get_signup_code, get_token_verifier
 from db import get_db
-from main import _round2, app
+from main import _round2, app, get_tutor_limiter
 from models import Account
+from ratelimit import RateLimiter
 from services.market.candles import CandlePoint, Candles, get_candle_client
 from services.market.client import (
     CompanyProfile,
@@ -187,6 +188,11 @@ def overrides(db_session: Session, market: FakeMarket, candles: FakeCandles) -> 
     app.dependency_overrides[get_market_client] = lambda: market
     app.dependency_overrides[get_candle_client] = lambda: candles
     app.dependency_overrides[get_tutor_provider] = lambda: FakeTutor()
+    # A permissive limiter by default, so the tutor tests aren't throttled; the throttle
+    # test below swaps in a tiny one to exercise the limit itself.
+    app.dependency_overrides[get_tutor_limiter] = lambda: RateLimiter(
+        max_calls=10_000, per_seconds=60
+    )
     yield
     app.dependency_overrides.clear()
 
@@ -892,6 +898,22 @@ def test_one_users_tutor_never_sees_anothers_money(
     body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
     assert client.post("/api/tutor", json=body).status_code == 200
     assert sams_client.post("/api/tutor", json=body).status_code == 200
+
+
+def test_the_tutor_is_throttled_per_account(overrides: None) -> None:
+    # Two calls a minute here (a person never trips it; a runaway loop does). The third is
+    # refused with 429, so the loop stops before it can run up the OpenAI bill.
+    limiter = RateLimiter(max_calls=2, per_seconds=60)
+    app.dependency_overrides[get_tutor_limiter] = lambda: limiter
+    alex = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_ALEX}"})
+    body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
+    assert alex.post("/api/tutor", json=body).status_code == 200
+    assert alex.post("/api/tutor", json=body).status_code == 200
+    assert alex.post("/api/tutor", json=body).status_code == 429
+
+    # The budget is per account, so one noisy user can't throttle everyone else.
+    sam = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_SAM}"})
+    assert sam.post("/api/tutor", json=body).status_code == 200
 
 
 def _limit(symbol: str, side: str, value: float, limit_price: float) -> dict[str, Any]:

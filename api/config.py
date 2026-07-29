@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # market, tutor, or portfolio routes) until they redeem the code once. This is what
     # keeps a public demo from being open to every passer-by and bot. See auth.py.
     signup_code: str | None = None
+    # A light per-account cap on tutor calls per minute. The tutor is the one route that
+    # costs us real money per call, so this stops one account (or a leaked invite code) from
+    # looping it and running up the OpenAI bill. Generous enough that a person asking
+    # questions never notices; low enough to kill a runaway loop. See ratelimit.py.
+    tutor_rate_limit_per_minute: int = 15
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.
