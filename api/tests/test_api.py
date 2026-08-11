@@ -26,9 +26,10 @@ from sqlalchemy.orm import Session
 
 from auth import get_signup_code, get_token_verifier
 from db import get_db
-from main import _round2, app, get_tutor_limiter
+from main import _round2, app, get_seed_new_accounts, get_tutor_limiter
 from models import Account
 from ratelimit import RateLimiter
+from seed import DEMO_BUYS
 from services.market.candles import CandlePoint, Candles, get_candle_client
 from services.market.client import (
     CompanyProfile,
@@ -321,6 +322,56 @@ def test_redeeming_twice_is_a_harmless_no_op(gated: str) -> None:
 
 def test_redeeming_needs_a_token(gated: str) -> None:
     assert TestClient(app).post("/api/redeem-invite", json={"code": gated}).status_code == 401
+
+
+# --- auto-seeding a new account with the demo sample -------------------------------------
+
+
+class _FlatYearCandles:
+    """A year of flat $100 bars for any symbol, so all five demo buys resolve in a test."""
+
+    def get_candles(self, symbol: str, *, outputsize: int = 90) -> Candles:
+        today = date.today()
+        points = [
+            CandlePoint((today - timedelta(days=offset)).isoformat(), 100.0)
+            for offset in reversed(range(365))
+        ]
+        return Candles(symbol.upper(), points)
+
+
+def _seeding_client() -> TestClient:
+    """A client whose redeem seeds the demo sample, with a price for every demo symbol."""
+    app.dependency_overrides[get_seed_new_accounts] = lambda: True
+    app.dependency_overrides[get_candle_client] = lambda: _FlatYearCandles()
+    app.dependency_overrides[get_market_client] = lambda: FakeMarket(
+        prices={symbol: 100.0 for symbol, _, _ in DEMO_BUYS}
+    )
+    return TestClient(app, headers={"Authorization": f"Bearer {TOKEN_ALEX}"})
+
+
+def test_a_plain_account_is_not_a_sample(client: TestClient) -> None:
+    assert client.get("/api/portfolio").json()["is_sample"] is False
+
+
+def test_redeem_seeds_the_sample_portfolio_when_enabled(overrides: None) -> None:
+    alex = _seeding_client()
+    assert alex.post("/api/redeem-invite", json={"code": "x"}).status_code == 200
+
+    portfolio = alex.get("/api/portfolio").json()
+    assert portfolio["is_sample"] is True
+    assert len(portfolio["holdings"]) == len(DEMO_BUYS)
+
+
+def test_reset_turns_the_sample_into_a_real_empty_account(overrides: None) -> None:
+    alex = _seeding_client()
+    alex.post("/api/redeem-invite", json={"code": "x"})
+    assert alex.get("/api/portfolio").json()["is_sample"] is True
+
+    # Reset is how a sample becomes their own: the flag clears and the holdings go.
+    assert alex.post("/api/account/reset").status_code == 200
+    portfolio = alex.get("/api/portfolio").json()
+    assert portfolio["is_sample"] is False
+    assert portfolio["holdings"] == []
 
 
 def test_first_sign_in_opens_a_funded_account(client: TestClient) -> None:

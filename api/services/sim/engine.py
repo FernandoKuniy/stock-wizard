@@ -150,6 +150,8 @@ def reset(session: Session, account: Account) -> None:
         .execution_options(synchronize_session=False)
     )
     account.cash_balance = account.starting_balance
+    # A reset turns the demo sample into a real, empty account: their own clean slate.
+    account.is_sample = False
     session.flush()
 
 

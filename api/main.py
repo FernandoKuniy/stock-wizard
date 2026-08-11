@@ -8,6 +8,7 @@ JSON. No financial figure is computed here beyond rounding for display.
 from __future__ import annotations
 
 import hmac
+import logging
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal
@@ -62,6 +63,7 @@ from schemas import (
     WhatIfLegOut,
     WhatIfOut,
 )
+from seed import SeedError, seed_history
 from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import ValuePoint
 from services.analysis.moves import DayMove, describe_day_move
@@ -92,6 +94,8 @@ from services.sim.engine import SimError, buy, reset, sell
 from services.tutor.engine import Turn, run_tutor
 from services.tutor.provider import TutorError, TutorProvider, get_tutor_provider
 from services.tutor.tools import build_tools
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Stock Wizard API")
 
@@ -158,6 +162,11 @@ def enforce_tutor_rate_limit(
             status_code=429,
             detail="You're asking a lot at once. Give it a minute, then try again.",
         )
+
+
+def get_seed_new_accounts() -> bool:
+    """Whether a fresh account gets the demo sample. A dependency so a test can flip it."""
+    return get_settings().seed_new_accounts
 
 
 @app.get("/health")
@@ -333,6 +342,7 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         unpriced_symbols=snapshot.unpriced_symbols,
         what_moved=snapshot.what_moved,
         achievements=achievements,
+        is_sample=account.is_sample,
     )
 
 
@@ -533,7 +543,9 @@ def redeem_invite(
     body: RedeemInviteRequest,
     identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
     session: SessionDep,
+    candles: CandleDep,
     signup_code: Annotated[str | None, Depends(get_signup_code)],
+    seed_sample: Annotated[bool, Depends(get_seed_new_accounts)],
 ) -> RedeemInviteOut:
     """Trade a valid invite code for a funded account, opening the door to the rest of the app.
 
@@ -545,6 +557,11 @@ def redeem_invite(
     a double submit or a stale tab can never lock anyone out. Otherwise the code must match the
     configured one, compared in constant time so the endpoint can't be used as a timing oracle.
     With no code configured the gate is off and any signed-in user is simply provisioned.
+
+    When ``seed_new_accounts`` is on (the hosted demo), a fresh account is filled with the
+    sample six-month portfolio so it teaches from the first screen. Seeding is best-effort: if
+    the market data can't be fetched the account just opens empty, because opening it is the
+    part that must not fail.
     """
     existing = session.scalar(select(User).where(User.auth_id == identity.auth_id))
     if existing is not None:
@@ -556,7 +573,16 @@ def redeem_invite(
         )
 
     user = get_or_create_user(session, auth_id=identity.auth_id, email=identity.email)
-    get_or_create_account(session, user, starting_balance=get_settings().starting_balance)
+    account, _ = get_or_create_account(
+        session, user, starting_balance=get_settings().starting_balance
+    )
+    if seed_sample:
+        try:
+            seed_history(session, account, candles)
+        except (SeedError, SimError) as exc:
+            # A nice-to-have on top of the real account, so a data hiccup leaves it empty
+            # rather than failing the signup outright.
+            logger.warning("Could not seed a new account with sample history: %s", exc)
     session.commit()
     return RedeemInviteOut()
 

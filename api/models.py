@@ -11,6 +11,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -50,6 +52,9 @@ class Account(Base):
     cash_balance: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     starting_balance: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # True while the account still holds the demo sample we seed it with on the hosted demo,
+    # so the UI can offer "hit reset to start your own". Set when seeded, cleared on reset.
+    is_sample: Mapped[bool] = mapped_column(Boolean(), default=False, server_default=text("false"))
 
     user: Mapped[User] = relationship(back_populates="accounts")
     holdings: Mapped[list[Holding]] = relationship(back_populates="account")

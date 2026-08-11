@@ -53,6 +53,9 @@ export type Portfolio = {
   // Habit badges, earned and still-locked, detected on this same load from the account's own
   // holdings and trades. Rides along on the portfolio payload rather than its own request.
   achievements: Achievement[];
+  // True while this is the demo sample we seeded a new account with, so the UI can offer
+  // "hit reset to start your own". A reset clears it.
+  is_sample: boolean;
 };
 
 // One observation about how your money is spread out. "notable" means worth understanding,

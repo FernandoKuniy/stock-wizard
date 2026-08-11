@@ -212,6 +212,9 @@ class PortfolioOut(BaseModel):
     # trades on the same load (no extra provider call). Rides along on the portfolio payload
     # the dashboard already fetches rather than adding a route.
     achievements: list[AchievementOut]
+    # True while this is the demo sample we seeded a new account with, so the dashboard can
+    # offer "this is a sample, hit reset to start your own". Cleared by a reset.
+    is_sample: bool
 
 
 class HistoryPointOut(BaseModel):

@@ -3,6 +3,7 @@ import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { PortfolioSummary } from "@/components/PortfolioSummary";
 import { ResetButton } from "@/components/ResetButton";
+import { SampleBanner } from "@/components/SampleBanner";
 import { StartHere } from "@/components/StartHere";
 import { TopHoldings } from "@/components/TopHoldings";
 import { redirect } from "next/navigation";
@@ -70,6 +71,8 @@ export default async function Home() {
           prices. Buy things, get them wrong, hit reset. That&apos;s the whole point.
         </FirstTimeCallout>
 
+        {portfolio.is_sample && <SampleBanner />}
+
         <PortfolioSummary portfolio={portfolio} />
 
         {portfolio.unpriced_symbols.length > 0 && (
@@ -112,10 +115,6 @@ export default async function Home() {
           <ResetButton />
         </div>
       </div>
-
-      <p className="mt-10 text-center text-xs text-zinc-500">
-        Simulation for education. Not financial advice.
-      </p>
     </main>
   );
 }

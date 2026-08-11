@@ -139,6 +139,8 @@ def test_history_buys_the_demo_holdings_at_their_historical_prices(db_session: S
     # DEMO_BUYS is listed oldest first, and the trades are written in the order they
     # happened, so the two line up.
     assert [t.symbol for t in trades] == [symbol for symbol, _, _ in DEMO_BUYS]
+    # Seeding marks the account as the demo sample, so the dashboard can offer a reset.
+    assert account.is_sample is True
     # $75k of the $100k gets invested, at $100 a share.
     spent = sum(dollars for _, dollars, _ in DEMO_BUYS)
     assert account.cash_balance == get_settings().starting_balance - spent

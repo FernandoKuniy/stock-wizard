@@ -102,6 +102,9 @@ def seed_history(session: Session, account: Account, candles: CandleProvider) ->
     # the money was already invested.
     earliest = min(day for _, _, day, _ in fills)
     account.created_at = _at_close(earliest - timedelta(days=LEAD_IN_DAYS))
+    # Mark it as the demo sample, so the dashboard can offer "hit reset to start your own".
+    # A reset clears this again, leaving a real, empty account.
+    account.is_sample = True
 
     trades = []
     for symbol, dollars, day, price in sorted(fills, key=lambda fill: fill[2]):

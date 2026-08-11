@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # looping it and running up the OpenAI bill. Generous enough that a person asking
     # questions never notices; low enough to kill a runaway loop. See ratelimit.py.
     tutor_rate_limit_per_minute: int = 15
+    # Give every brand-new account the six-month sample portfolio (the same demo trades
+    # `seed --history` makes), so a first-time visitor lands on a dashboard that actually
+    # teaches (a benchmark curve, a check-up, a what-if) rather than an empty screen. Off by
+    # default so local dev and tests open plain empty accounts; turn it on for the hosted
+    # demo. Seeding degrades to an empty account if the market data can't be fetched, and a
+    # reset always clears it back to a real, empty account. Needs the Twelve Data key.
+    seed_new_accounts: bool = False
     # The frontend dev server origin, allowed through CORS.
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.
