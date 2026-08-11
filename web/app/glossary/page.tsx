@@ -47,10 +47,6 @@ export default function GlossaryPage() {
         </Link>{" "}
         about your own portfolio, in your own words.
       </p>
-
-      <p className="mt-10 text-center text-xs text-zinc-500">
-        Simulation for education. Not financial advice.
-      </p>
     </main>
   );
 }

@@ -43,10 +43,6 @@ export default function RedeemPage() {
           {pending ? "One sec…" : "Unlock my account"}
         </button>
       </form>
-
-      <p className="mt-10 text-center text-xs text-zinc-500">
-        Simulation for education. Not financial advice.
-      </p>
     </main>
   );
 }

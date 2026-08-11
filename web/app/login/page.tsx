@@ -88,10 +88,6 @@ export default function LoginPage() {
           </button>
         </div>
       </form>
-
-      <p className="mt-10 text-center text-xs text-zinc-500">
-        Simulation for education. Not financial advice.
-      </p>
     </main>
   );
 }

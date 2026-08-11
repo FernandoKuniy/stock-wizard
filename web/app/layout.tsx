@@ -99,6 +99,9 @@ export default async function RootLayout({
           )}
         </header>
         {children}
+        <footer className="border-t border-zinc-100 px-6 py-6 text-center text-xs text-zinc-500 dark:border-zinc-800">
+          A simulation for learning, not financial advice. Real market prices, pretend money.
+        </footer>
       </body>
     </html>
   );

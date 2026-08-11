@@ -87,10 +87,6 @@ export default async function HoldingsPage() {
           </div>
         )}
       </div>
-
-      <p className="mt-10 text-center text-xs text-zinc-500">
-        Simulation for education. Not financial advice.
-      </p>
     </main>
   );
 }
