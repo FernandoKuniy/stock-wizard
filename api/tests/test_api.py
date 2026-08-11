@@ -26,9 +26,12 @@ from sqlalchemy.orm import Session
 
 from auth import get_signup_code, get_token_verifier
 from db import get_db
-from main import _round2, app, get_seed_new_accounts, get_tutor_limiter
+from main import app
 from models import Account
 from ratelimit import RateLimiter
+from routers.account import get_seed_new_accounts
+from routers.common import _round2
+from routers.tutor import get_tutor_limiter
 from seed import DEMO_BUYS
 from services.market.candles import CandlePoint, Candles, get_candle_client
 from services.market.client import (
