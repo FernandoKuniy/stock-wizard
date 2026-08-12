@@ -18,6 +18,7 @@ from deps import get_current_account
 from models import Account
 from services.market.candles import CandleClient, get_candle_client
 from services.market.client import MarketClient, get_market_client
+from services.market.dividends import DividendProvider, get_dividend_provider
 from services.tutor.provider import TutorProvider, get_tutor_provider
 
 # The index we measure everyone against. SPY tracks the S&P 500, and it is just another
@@ -28,6 +29,7 @@ _CENTS = Decimal("0.01")
 
 MarketDep = Annotated[MarketClient, Depends(get_market_client)]
 CandleDep = Annotated[CandleClient, Depends(get_candle_client)]
+DividendDep = Annotated[DividendProvider, Depends(get_dividend_provider)]
 SessionDep = Annotated[Session, Depends(get_db)]
 AccountDep = Annotated[Account, Depends(get_current_account)]
 # None when no OpenAI key is configured; the tutor route says so plainly rather than crashing.

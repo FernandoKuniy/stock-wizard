@@ -7,7 +7,7 @@ what these carry; it never recomputes a figure (hard rule #1).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -215,6 +215,10 @@ class PortfolioOut(BaseModel):
     # True while this is the demo sample we seeded a new account with, so the dashboard can
     # offer "this is a sample, hit reset to start your own". Cleared by a reset.
     is_sample: bool
+    # Every dividend dollar this account has been paid for holding its stocks, summed. Already
+    # part of ``cash`` (and so ``total_value``): it's surfaced on its own so the UI can teach
+    # that some of the money arrived just for holding. Zero when nothing has paid out yet.
+    dividend_income: float
 
 
 class HistoryPointOut(BaseModel):
@@ -290,6 +294,22 @@ class TransactionOut(BaseModel):
     price: float
     total: float
     timestamp: datetime
+
+
+class DividendOut(BaseModel):
+    """One dividend paid into the account for holding a stock through its ex-date.
+
+    ``shares`` and ``per_share`` are kept so the payment can be explained ("12.5 shares at
+    $0.51"); ``amount`` is the cash that landed. Not a transaction: dividends are cash the
+    company paid you, not something you bought or sold.
+    """
+
+    symbol: str
+    ex_date: date
+    per_share: float
+    shares: float
+    amount: float
+    paid_at: datetime
 
 
 class OrderOut(BaseModel):

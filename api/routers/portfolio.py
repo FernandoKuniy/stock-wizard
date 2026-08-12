@@ -14,11 +14,12 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import Account, Holding, Transaction
+from models import Account, DividendPayment, Holding, Transaction
 from routers.common import (
     BENCHMARK_SYMBOL,
     AccountDep,
     CandleDep,
+    DividendDep,
     MarketDep,
     SessionDep,
     _round2,
@@ -29,6 +30,7 @@ from schemas import (
     AchievementOut,
     BenchmarkComparisonOut,
     CheckupFindingOut,
+    DividendOut,
     HistoryPointOut,
     HoldingOut,
     NeverSoldOut,
@@ -36,7 +38,8 @@ from schemas import (
     PortfolioOut,
 )
 from services.achievements import EarnedBadge, award_achievements
-from services.analysis.history import ValuePoint
+from services.analysis.history import CashCredit, SharePayout, ValuePoint
+from services.market.dividends import DividendProvider
 from services.portfolio import (
     HoldingView,
     MissingHistory,
@@ -46,6 +49,7 @@ from services.portfolio import (
     build_sectors,
     build_snapshot,
 )
+from services.sim import dividends as sim_dividends
 
 # How far back the performance chart looks. "all" is the account's whole life and stays the
 # default, so the tutor and anyone else calling this still get the since-you-started answer.
@@ -59,9 +63,17 @@ router = APIRouter()
 
 
 @router.get("/api/portfolio")
-def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) -> PortfolioOut:
-    """The dashboard payload: holdings, totals, and gain/loss, all computed in code."""
+def read_portfolio(
+    account: AccountDep, session: SessionDep, market: MarketDep, dividends: DividendDep
+) -> PortfolioOut:
+    """The dashboard payload: holdings, totals, and gain/loss, all computed in code.
+
+    Loading the dashboard is also when resting limit orders settle and dividends are paid, on
+    the same lazy, no-cron schedule: the user looks at their money, so we bring it up to date.
+    Dividends are swept before the snapshot so the cash it values already includes them.
+    """
     _sweep_orders(session, account, market)
+    _sweep_dividends(session, account, dividends)
     holdings = list(
         session.scalars(
             select(Holding).where(Holding.account_id == account.id).order_by(Holding.symbol)
@@ -83,6 +95,7 @@ def read_portfolio(account: AccountDep, session: SessionDep, market: MarketDep) 
         what_moved=snapshot.what_moved,
         achievements=achievements,
         is_sample=account.is_sample,
+        dividend_income=_round2(sim_dividends.total_dividends(session, account)),
     )
 
 
@@ -122,12 +135,22 @@ def read_portfolio_checkup(
 
 @router.get("/api/portfolio/history")
 def read_portfolio_history(
-    account: AccountDep, session: SessionDep, candles: CandleDep, period: HistoryPeriod = "all"
+    account: AccountDep,
+    session: SessionDep,
+    candles: CandleDep,
+    dividends: DividendDep,
+    period: HistoryPeriod = "all",
 ) -> PortfolioHistoryOut:
     """The performance chart: what the account has been worth, against the S&P 500.
 
     Rebuilt from the transactions and real closing prices rather than read from a stored
     snapshot, so it is exact from the account's first day. See services/analysis/history.py.
+
+    Dividends are folded in on both sides: the account's own payments lift its line (so the last
+    point matches the dashboard total), and the index's payouts lift the benchmark, which makes
+    it an honest total-return comparison rather than one that quietly flatters the dividend
+    collector. Neither costs a provider call: the payments are already recorded, and the index's
+    dividends come from the same static calendar (see services/market/dividends.py).
 
     ``period`` narrows it to one stretch. The series is built over the account's whole life
     either way and then sliced, off candles we already fetched and cached, so switching periods
@@ -149,6 +172,8 @@ def read_portfolio_history(
             starting_balance=account.starting_balance,
             benchmark_symbol=BENCHMARK_SYMBOL,
             since=date.today() - timedelta(days=days) if days is not None else None,
+            dividends=_dividend_credits(session, account),
+            benchmark_dividends=_benchmark_payouts(dividends, BENCHMARK_SYMBOL),
         )
     except MissingHistory as exc:
         # Without a held symbol's prices the whole line would be wrong, and a wrong chart
@@ -198,6 +223,46 @@ def read_portfolio_history(
     )
 
 
+@router.get("/api/dividends")
+def read_dividends(account: AccountDep, session: SessionDep) -> list[DividendOut]:
+    """Every dividend this account has been paid, newest first.
+
+    A pure read: dividends are settled when the dashboard loads (see ``read_portfolio``), so
+    this route just lists what's already on file and never spends a provider call.
+    """
+    rows = session.scalars(
+        select(DividendPayment)
+        .where(DividendPayment.account_id == account.id)
+        .order_by(DividendPayment.ex_date.desc(), DividendPayment.id.desc())
+    )
+    return [_dividend_out(payment) for payment in rows]
+
+
+def _sweep_dividends(session: Session, account: Account, provider: DividendProvider) -> None:
+    """Pay any dividend the account is owed for stock it held through the ex-date.
+
+    The dividend counterpart of the order sweep: no background job, settled when the user loads
+    their money. Committing inside a GET is deliberate, since a payment is a real change to the
+    account. Idempotent, so a steady-state load pays nothing and stays a pure read.
+    """
+    if sim_dividends.sweep(session, account, provider):
+        session.commit()
+
+
+def _dividend_credits(session: Session, account: Account) -> list[CashCredit]:
+    """The account's paid dividends as dated cash inflows for the history replay."""
+    rows = session.scalars(select(DividendPayment).where(DividendPayment.account_id == account.id))
+    return [CashCredit(on=row.ex_date, amount=row.amount) for row in rows]
+
+
+def _benchmark_payouts(provider: DividendProvider, symbol: str) -> list[SharePayout]:
+    """The index's own dividends, per share, so the benchmark line is total return too."""
+    return [
+        SharePayout(on=event.ex_date, per_share=event.amount)
+        for event in provider.get_dividends(symbol)
+    ]
+
+
 def _award_achievements(
     session: Session, account: Account, snapshot: PortfolioSnapshot
 ) -> list[AchievementOut]:
@@ -221,6 +286,17 @@ def _achievement_out(badge: EarnedBadge) -> AchievementOut:
         lesson=badge.lesson,
         earned=badge.earned,
         earned_at=badge.earned_at,
+    )
+
+
+def _dividend_out(payment: DividendPayment) -> DividendOut:
+    return DividendOut(
+        symbol=payment.symbol,
+        ex_date=payment.ex_date,
+        per_share=_round2(payment.per_share),
+        shares=_shares(payment.shares),
+        amount=_round2(payment.amount),
+        paid_at=payment.paid_at,
     )
 
 

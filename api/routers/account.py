@@ -17,7 +17,7 @@ from sqlalchemy import select
 from auth import AuthIdentity, get_auth_identity, get_or_create_user, get_signup_code
 from config import get_settings
 from models import User
-from routers.common import AccountDep, CandleDep, MarketDep, SessionDep
+from routers.common import AccountDep, CandleDep, DividendDep, MarketDep, SessionDep
 from routers.portfolio import read_portfolio
 from schemas import MeOut, PortfolioOut, RedeemInviteOut, RedeemInviteRequest
 from seed import SeedError, seed_history
@@ -100,8 +100,10 @@ def redeem_invite(
 
 
 @router.post("/api/account/reset")
-def reset_account(account: AccountDep, session: SessionDep, market: MarketDep) -> PortfolioOut:
-    """Wipe holdings and transactions and restore the starting cash."""
+def reset_account(
+    account: AccountDep, session: SessionDep, market: MarketDep, dividends: DividendDep
+) -> PortfolioOut:
+    """Wipe holdings, transactions, orders and dividend payments, and restore the starting cash."""
     reset(session, account)
     session.commit()
-    return read_portfolio(account, session, market)
+    return read_portfolio(account, session, market, dividends)
