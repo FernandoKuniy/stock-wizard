@@ -6,13 +6,14 @@ are real balances in the sim and must stay exact.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Numeric,
@@ -62,6 +63,7 @@ class Account(Base):
     watchlist_items: Mapped[list[WatchlistItem]] = relationship(back_populates="account")
     orders: Mapped[list[Order]] = relationship(back_populates="account")
     achievements: Mapped[list[Achievement]] = relationship(back_populates="account")
+    dividend_payments: Mapped[list[DividendPayment]] = relationship(back_populates="account")
 
 
 class Holding(Base):
@@ -144,6 +146,34 @@ class Achievement(Base):
     earned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="achievements")
+
+
+class DividendPayment(Base):
+    """A dividend an account was paid for holding a stock through its ex-date.
+
+    Real money in the sim: the cash is credited to the account when this row is written. It is
+    NOT a ``Transaction`` (those are buys and sells, and the whole app assumes that), it is a
+    cash event of its own. Settlement is lazy and add-only, checked when the user loads their
+    dashboard like the limit-order sweep, and the unique constraint on (account, symbol, ex_date)
+    is what makes that safe to run on every load: a dividend is paid exactly once. ``shares`` and
+    ``per_share`` are kept for the record even though ``amount`` is what moved, so the payment can
+    be explained ("you held 12.5 shares, at $0.51 each"). See services/sim/dividends.py."""
+
+    __tablename__ = "dividend_payments"
+    __table_args__ = (
+        UniqueConstraint("account_id", "symbol", "ex_date", name="uq_dividend_account_symbol_ex"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    ex_date: Mapped[date] = mapped_column(Date())
+    per_share: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    shares: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped[Account] = relationship(back_populates="dividend_payments")
 
 
 class WatchlistItem(Base):
