@@ -51,10 +51,20 @@ class Settings(BaseSettings):
     # demo. Seeding degrades to an empty account if the market data can't be fetched, and a
     # reset always clears it back to a real, empty account. Needs the Twelve Data key.
     seed_new_accounts: bool = False
-    # The frontend dev server origin, allowed through CORS.
+    # The frontend origin(s) allowed through CORS. One origin in dev; in a deployed setup this
+    # is the frontend's URL, which the browser calls cross-origin. Comma-separate to allow more
+    # than one (e.g. the production URL plus a Vercel preview or a custom domain).
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.
     starting_balance: Decimal = Decimal("100000")
+
+    @property
+    def frontend_origins(self) -> list[str]:
+        """The CORS allow-list, from the comma-separated ``FRONTEND_ORIGIN``.
+
+        Explicit origins, never ``*``: the API sends credentials, and the two can't be combined.
+        """
+        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
 
     @property
     def supabase_jwks_url(self) -> str:

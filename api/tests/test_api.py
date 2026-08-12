@@ -231,6 +231,13 @@ def test_health_needs_no_token(anon_client: TestClient) -> None:
     assert anon_client.get("/health").json() == {"status": "ok"}
 
 
+def test_readiness_check_pings_the_database(anon_client: TestClient) -> None:
+    # Open, like /health, and confirms the DB answers. It's what the keep-warm ping hits.
+    resp = anon_client.get("/health/ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ready"}
+
+
 @pytest.mark.parametrize(
     "method,path",
     [
