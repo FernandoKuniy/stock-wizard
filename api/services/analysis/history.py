@@ -57,6 +57,30 @@ class ValuePoint:
 
 
 @dataclass(frozen=True)
+class CashCredit:
+    """A cash inflow that isn't a trade: a dividend paid into the account, in dollars.
+
+    The amount is absolute (already ``shares * per_share`` at the time it was paid), so the
+    replay just adds it to cash on its date, the way a real dividend lands as spendable money.
+    """
+
+    on: date
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class SharePayout:
+    """A dividend as dollars *per share*, for valuing a fixed position (the benchmark's).
+
+    The benchmark holds a share count we don't know until it's priced, so its dividends are
+    carried per-share and multiplied by that count inside ``benchmark_series``.
+    """
+
+    on: date
+    per_share: Decimal
+
+
+@dataclass(frozen=True)
 class BenchmarkComparison:
     """The punchline: your money against the same money left in the index."""
 
@@ -73,20 +97,27 @@ def portfolio_value_series(
     trades: Iterable[Trade],
     closes: Mapping[str, Closes],
     dates: Sequence[date],
+    cash_credits: Sequence[CashCredit] = (),
 ) -> list[ValuePoint]:
     """What the account was worth on each day in ``dates``, oldest first.
 
     Replays the trades in order, tracking cash and share counts, and prices whatever is
     held at that day's close. A symbol with no bar on a given day is carried at its last
     known close, which is what happens on a holiday or a halted day.
+
+    ``cash_credits`` are non-trade inflows (dividends) added to cash on their date, so the
+    reconstructed cash equals what actually sat in the account, dividends included, and the
+    line's last point matches the live dashboard total instead of drifting below it.
     """
     ordered = sorted(trades, key=lambda trade: trade.on)
+    credits = sorted(cash_credits, key=lambda credit: credit.on)
     prices = {symbol: _carry_forward(bars, dates) for symbol, bars in closes.items()}
 
     points: list[ValuePoint] = []
     cash = starting_balance
     shares: dict[str, Decimal] = {}
     next_trade = 0
+    next_credit = 0
 
     for day in dates:
         while next_trade < len(ordered) and ordered[next_trade].on <= day:
@@ -94,6 +125,9 @@ def portfolio_value_series(
             cash = _apply_to_cash(cash, trade)
             shares[trade.symbol] = _apply_to_shares(shares.get(trade.symbol, _ZERO), trade)
             next_trade += 1
+        while next_credit < len(credits) and credits[next_credit].on <= day:
+            cash += credits[next_credit].amount
+            next_credit += 1
 
         value = cash
         for symbol, quantity in shares.items():
@@ -110,12 +144,21 @@ def portfolio_value_series(
 
 
 def benchmark_series(
-    starting_balance: Decimal, closes: Closes, dates: Sequence[date]
+    starting_balance: Decimal,
+    closes: Closes,
+    dates: Sequence[date],
+    dividends: Sequence[SharePayout] = (),
 ) -> list[ValuePoint]:
     """What the starting balance would be worth if it had all gone into the index on day one.
 
     Returns an empty list if the index has no price on the first day, since without it
     there is nothing to buy at and no honest comparison to draw.
+
+    ``dividends`` are the index's own payouts, per share, added as cash so the comparison is
+    total return against total return: the user's line collects their holdings' dividends, so a
+    price-only index line would quietly flatter them. Only ex-dates strictly after the window's
+    first day count, since the position is bought at that day's open and so misses a dividend
+    going ex on that very day.
     """
     if not dates:
         return []
@@ -127,13 +170,21 @@ def benchmark_series(
 
     # Fractional shares, exactly like the app lets a user buy.
     shares = starting_balance / opening_price
+    payouts = sorted(
+        (payout for payout in dividends if payout.on > dates[0]), key=lambda payout: payout.on
+    )
 
     points: list[ValuePoint] = []
+    next_payout = 0
+    dividend_cash = _ZERO
     for day in dates:
+        while next_payout < len(payouts) and payouts[next_payout].on <= day:
+            dividend_cash += shares * payouts[next_payout].per_share
+            next_payout += 1
         price = prices.get(day)
         if price is None:
             continue
-        points.append(ValuePoint(on=day, value=shares * price))
+        points.append(ValuePoint(on=day, value=shares * price + dividend_cash))
     return points
 
 
@@ -142,6 +193,7 @@ def never_sold_series(
     trades: Sequence[Trade],
     closes: Mapping[str, Closes],
     dates: Sequence[date],
+    cash_credits: Sequence[CashCredit] = (),
 ) -> list[ValuePoint] | None:
     """What the account would be worth if every buy had simply been held.
 
@@ -149,6 +201,12 @@ def never_sold_series(
     machinery rather than repeating it, and it prices off closes the caller has already
     fetched. It answers a fact about the user's own history, not a suggestion: see the copy
     rules in the route that renders it.
+
+    ``cash_credits`` (the account's real dividends) are applied here too so that the difference
+    the route shows, real minus never-sold, nets them out: the same dividend dollars sit on both
+    sides and cancel, leaving a clean "did selling help?" comparison of the price moves alone.
+    This does not re-derive the dividends the counterfactual would have earned on the shares it
+    never sold, which keeps a secondary teaching fact from turning into a second dividend engine.
 
     Returns ``None`` in the two cases where there is no honest answer:
 
@@ -167,7 +225,7 @@ def never_sold_series(
     if not _affordable(starting_balance, buys):
         return None
 
-    return portfolio_value_series(starting_balance, buys, closes, dates)
+    return portfolio_value_series(starting_balance, buys, closes, dates, cash_credits)
 
 
 def _affordable(starting_balance: Decimal, buys: Sequence[Trade]) -> bool:
