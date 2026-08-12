@@ -1,0 +1,39 @@
+# Render Blueprint for the FastAPI backend. Import it at
+# https://dashboard.render.com/blueprints, then fill in the secret env vars in the dashboard
+# (every key marked `sync: false`). The frontend deploys separately on Vercel. Full walkthrough
+# in docs/deploy.md.
+services:
+  - type: web
+    name: stock-wizard-api
+    runtime: python
+    plan: free
+    rootDir: api
+    # Free instances ship no uv, so install it, then sync exactly what the lockfile pins
+    # (without the dev tools, which prod doesn't need).
+    buildCommand: "pip install uv && uv sync --frozen --no-dev"
+    # Migrate, then serve. Running the migration here (rather than a paid pre-deploy hook) keeps
+    # it free-tier friendly: it's a no-op once the database is at head, and there's a single
+    # instance, so there's no migration race to worry about.
+    startCommand: "uv run alembic upgrade head && uv run uvicorn main:app --host 0.0.0.0 --port $PORT"
+    # Liveness, not readiness: a brief database blip shouldn't make Render stop routing traffic.
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: SEED_NEW_ACCOUNTS
+        value: "true"
+      # --- Set these in the Render dashboard; they never live in git. ---
+      - key: DATABASE_URL # Supabase session-mode pooler URL (postgresql://...)
+        sync: false
+      - key: SUPABASE_URL # https://<project>.supabase.co
+        sync: false
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: TWELVE_DATA_API_KEY # charts and the sample-history seeding need it
+        sync: false
+      - key: OPENAI_API_KEY # the AI tutor; optional
+        sync: false
+      - key: SIGNUP_CODE # the invite gate; use a long random value
+        sync: false
+      - key: FRONTEND_ORIGIN # the Vercel URL, e.g. https://stock-wizard.vercel.app
+        sync: false

@@ -194,6 +194,7 @@ CI runs all of these on every push and pull request.
 - [docs/architecture.md](docs/architecture.md): data model, integrations, AI design, security.
 - [docs/roadmap.md](docs/roadmap.md): the build plan and progress log.
 - [docs/decisions.md](docs/decisions.md): decisions that diverge from the original plan.
+- [docs/deploy.md](docs/deploy.md): deploying to Render + Vercel + Supabase.
 
 ## License
 
