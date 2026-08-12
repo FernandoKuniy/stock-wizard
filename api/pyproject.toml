@@ -2,6 +2,7 @@
 name = "stockwiz-api"
 version = "0.1.0"
 description = "Backend for the StockWiz paper-trading app"
+license = "MIT"
 requires-python = ">=3.12"
 # App/runtime deps (fastapi, uvicorn, the db driver, etc.) get added in M0 with `uv add ...`.
 dependencies = [
