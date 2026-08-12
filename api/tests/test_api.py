@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from auth import get_signup_code, get_token_verifier
 from db import get_db
 from main import app
-from models import Account
+from models import Account, Transaction
 from ratelimit import RateLimiter
 from routers.account import get_seed_new_accounts
 from routers.common import _round2
@@ -42,6 +42,7 @@ from services.market.client import (
     SymbolMatch,
     get_market_client,
 )
+from services.market.dividends import StaticDividendProvider, get_dividend_provider
 from services.tutor.provider import Completion, TutorProvider, get_tutor_provider
 
 # Two signed-in people, each with their own Supabase user id.
@@ -191,6 +192,9 @@ def overrides(db_session: Session, market: FakeMarket, candles: FakeCandles) -> 
     app.dependency_overrides[get_token_verifier] = lambda: FakeVerifier()
     app.dependency_overrides[get_market_client] = lambda: market
     app.dependency_overrides[get_candle_client] = lambda: candles
+    # No dividends by default, so the money assertions elsewhere stay exact and don't shift when
+    # the shipped calendar is refreshed. The dividend tests below opt in with their own data.
+    app.dependency_overrides[get_dividend_provider] = lambda: StaticDividendProvider({})
     app.dependency_overrides[get_tutor_provider] = lambda: FakeTutor()
     # A permissive limiter by default, so the tutor tests aren't throttled; the throttle
     # test below swaps in a tiny one to exercise the limit itself.
@@ -243,6 +247,7 @@ def test_readiness_check_pings_the_database(anon_client: TestClient) -> None:
     [
         ("get", "/api/portfolio"),
         ("get", "/api/transactions"),
+        ("get", "/api/dividends"),
         ("post", "/api/account/reset"),
         ("post", "/api/orders"),
         ("post", "/api/tutor"),
@@ -260,6 +265,69 @@ def test_account_routes_require_a_token(anon_client: TestClient, method: str, pa
 def test_a_bad_token_is_rejected(overrides: None) -> None:
     impostor = TestClient(app, headers={"Authorization": "Bearer made-up"})
     assert impostor.get("/api/portfolio").status_code == 401
+
+
+# --- dividends ---------------------------------------------------------------------------
+# The settlement is unit-tested in test_dividends.py; these prove it's wired into the routes:
+# paid when the dashboard loads, listed, paid once, and cleared by a reset.
+
+
+def _arrange_dividend(client: TestClient, db_session: Session) -> None:
+    """Buy 10 AAPL, backdate the buy, and put a $1/share AAPL dividend a few days in the past.
+
+    A live buy is stamped "now", so it can never sit before an ex-date that's already passed;
+    backdating it is how a test recreates an account that has held a stock across an ex-date.
+    """
+    assert client.get("/api/portfolio").status_code == 200  # opens the account
+    client.post(
+        "/api/orders",
+        json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10, "type": "market"},
+    )
+    txn = db_session.scalars(select(Transaction)).one()
+    txn.timestamp = datetime.combine(date.today() - timedelta(days=10), time.min)
+    db_session.commit()
+    ex_date = (date.today() - timedelta(days=5)).isoformat()
+    app.dependency_overrides[get_dividend_provider] = lambda: StaticDividendProvider(
+        {"AAPL": [(ex_date, "1.00")]}
+    )
+
+
+def test_dividends_are_paid_when_the_dashboard_loads_and_listed(
+    client: TestClient, db_session: Session
+) -> None:
+    _arrange_dividend(client, db_session)
+
+    portfolio = client.get("/api/portfolio").json()
+    assert portfolio["dividend_income"] == 10.0  # 10 shares * $1.00
+    assert portfolio["cash"] == 98510.0  # 100,000 - 1,500 for the shares + 10 dividend
+
+    dividends = client.get("/api/dividends").json()
+    assert len(dividends) == 1
+    assert dividends[0]["symbol"] == "AAPL"
+    assert dividends[0]["shares"] == 10.0
+    assert dividends[0]["amount"] == 10.0
+
+
+def test_a_dividend_is_paid_only_once(client: TestClient, db_session: Session) -> None:
+    _arrange_dividend(client, db_session)
+
+    first = client.get("/api/portfolio").json()
+    second = client.get("/api/portfolio").json()
+
+    assert first["dividend_income"] == 10.0
+    assert second["dividend_income"] == 10.0  # not 20: settling twice pays once
+    assert len(client.get("/api/dividends").json()) == 1
+
+
+def test_a_reset_clears_dividends(client: TestClient, db_session: Session) -> None:
+    _arrange_dividend(client, db_session)
+    client.get("/api/portfolio")  # pays the dividend
+    assert client.get("/api/dividends").json()  # non-empty
+
+    after = client.post("/api/account/reset").json()
+
+    assert after["dividend_income"] == 0.0
+    assert client.get("/api/dividends").json() == []
 
 
 # --- the invite gate ---------------------------------------------------------------------
