@@ -6,6 +6,36 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-12  **Dividends come from a curated, checked-in calendar behind a swappable provider,
+  not a live feed.** Neither free tier we use serves dividend history: Finnhub's `/stock/dividend`
+  is premium (the same tier that already dropped candles), and Twelve Data's `/dividends` needs
+  its paid Grow plan. Since the hosted demo is invite-only and its sample portfolio only ever
+  touches a handful of symbols, we ship a small real-dividend calendar for those (plus SPY) in
+  `services/market/dividend_data.py`, served through a `DividendProvider` in
+  `services/market/dividends.py`. The amounts and cadence are real; exact ex-dates are meant to be
+  refreshed, and the window goes stale as "today" advances. An off-list symbol returns no
+  dividends (the truthful "none on record"), never an error. To cover arbitrary tickers later,
+  swap the provider for a live feed; nothing outside the market layer changes.
+- 2026-08-12  **The "vs the S&P 500" benchmark became a total-return comparison.** Once a paid
+  dividend lifts the user's own line (which it must, so the chart's last point still matches the
+  dashboard total), comparing it against a price-only index line would systematically flatter the
+  user by their holdings' dividend yield, on the order of a percent a year, on the exact chart the
+  whole product is built around. So the benchmark (SPY) now accrues its own dividends too, as cash,
+  making it total return against total return. This is a deliberate change to what the flagship
+  chart *means* (price return before, total return now) and an honesty upgrade: the real question
+  "did I beat the index?" is a total-return question. The index's dividends come from the same
+  static calendar, so it costs no provider call.
+- 2026-08-12  **A dividend is a cash event in its own `dividend_payments` table, credited on the
+  ex-date, not a `Transaction`.** Transactions are buys and sells (the `side` check constraint and
+  the whole history/analysis layer assume it), and a dividend changes cash without changing shares,
+  so overloading the ledger would have rippled everywhere. Settlement is **lazy on dashboard load**
+  like the limit-order sweep (no background job), pays for shares held *before* the ex-date
+  reconstructed from the ledger, and is **idempotent** via a unique (account, symbol, ex_date)
+  constraint plus a skip of what's on file, so it's safe to run on every load. We pay on the
+  ex-date's held shares and credit at settlement rather than modelling a separate pay date, which
+  keeps a teaching sim to one date without changing the amount. Dividends are cleared by a reset
+  (money earned on holdings the account no longer has) but a badge is not: dividends are money, not
+  a learning record.
 - 2026-07-28  **Signup is gated by a shared invite code, enforced at the API, not the form.**
   The app is becoming a public portfolio demo, and an open signup would let any passer-by or
   bot spend our OpenAI and market-data quota. A code checked only in the signup form would be

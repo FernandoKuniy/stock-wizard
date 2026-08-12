@@ -50,6 +50,12 @@ architecture.md ("The invite gate") for how it's enforced.
   real point. No activity or profit badges, and no daily-visit streak; the only "streak" is
   how long you leave a position alone, which is the one that lines up with good outcomes. See
   decisions.md (2026-07-22) for why the goal shifted from retention to teaching.
+- Dividends: companies paying you to hold their stock. A held position accrues cash when it's
+  held through a dividend's ex-date, credited automatically, so money shows up in the account for
+  doing nothing but waiting, which rewards the same patience the badges teach. It's framed as a
+  fact ("companies have paid you $X for holding"), never a reason to buy a high-yield stock (hard
+  rule #2). No free data feed serves dividends, so the hosted demo covers its sample symbols from a
+  curated calendar; see architecture.md and decisions.md (2026-08-12).
 
 ## Screens
 

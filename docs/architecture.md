@@ -46,10 +46,15 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
   idempotent, so the lazy re-check on every dashboard load only writes the first time. Add-only
   (a badge is never removed) and it survives a reset, since it's a learning record, not money.
   Added in M4.
+- `dividend_payments`: id, account_id, symbol, ex_date, per_share, shares, amount, paid_at, with
+  a unique constraint on (account_id, symbol, ex_date). One row per dividend an account was paid
+  for holding through an ex-date. A cash event of its own, not a transaction (see below). The
+  unique constraint makes the lazy settlement idempotent. Added in M7.
 
-Reset = set cash_balance back to starting_balance, delete holdings and transactions for
-that account. The watchlist and the achievements deliberately survive: neither is money, and
-a badge is a record of something you once did, which a reset doesn't undo.
+Reset = set cash_balance back to starting_balance, delete holdings, transactions, orders and
+dividend payments for that account. The watchlist and the achievements deliberately survive:
+neither is money, and a badge is a record of something you once did, which a reset doesn't undo.
+Dividend payments are cleared, because they're money the account earned on holdings it no longer has.
 
 ## Backend data layer and identity
 
@@ -594,6 +599,51 @@ toward endorsement faster than a static badge does, for no teaching gain.
 In the UI, a dashboard "Good habits" section lists earned and still-locked badges; each opens
 its explainer with a native `<details>` (no client JS), and a locked badge shows how to earn
 it. There is no streak counter and no nudging, on purpose.
+
+## Dividends (M7)
+
+Companies paying you to hold their stock, the biggest teaching gap the app had. It rewards the
+same patience the badges teach and, unlike a badge, puts real cash in the account for waiting.
+
+**The data problem, and the provider.** No free tier we use serves dividend history: Finnhub's
+`/stock/dividend` is premium (the same tier that dropped candles) and Twelve Data's `/dividends`
+needs the paid Grow plan. Since the hosted demo is invite-only and its sample portfolio only ever
+touches a handful of symbols, dividends come from a **curated, checked-in calendar**
+(`services/market/dividend_data.py`, real amounts and cadence for the demo symbols plus SPY),
+served through a `DividendProvider` in `services/market/dividends.py`. Like the rest of the market
+layer it's an interface with a swappable implementation: point `get_dividend_provider` at a live
+feed and nothing else changes. An off-list symbol returns an empty list, the truthful "none on
+record", never an error. The ceiling: the calendar is demo-scoped and goes stale as "today"
+advances, so it's meant to be refreshed or replaced, not relied on for arbitrary tickers.
+
+**Settlement, split across the usual layers.** A dividend is a **cash event of its own, not a
+transaction** (transactions are buys and sells, and the `side` constraint plus the whole
+history/analysis layer assume that), so it lives in `dividend_payments` and is settled by
+`services/sim/dividends.py`. `sweep` is **lazy and no-cron**, the same shape as the limit-order
+sweep: it runs inside `GET /api/portfolio`, pays every dividend whose ex-date has passed for
+shares the account held **before** that ex-date (reconstructed from the transaction ledger, so a
+buy on the ex-date itself misses it), credits the cash, and records the payment. It's
+**idempotent**: the unique (account, symbol, ex_date) constraint plus a skip of what's already on
+file means running it on every load pays each dividend exactly once. We pay on the ex-date's held
+shares and credit at settlement rather than modelling a separate pay date, which keeps a teaching
+sim to one date without changing the amount.
+
+**Folded into the history, and the benchmark went total-return.** The performance line is rebuilt
+from the transactions, so the paid dividends are threaded into that replay (`portfolio_value_series`
+takes cash credits) or the line's last point would drift below the live dashboard total. Once the
+user's line collects dividends, comparing it against a **price-only** index line would flatter them
+by their holdings' dividend yield, on the order of a percent a year, on the exact chart the product
+is built around. So `benchmark_series` now accrues the index's own dividends too, making it **total
+return against total return** (see decisions.md, 2026-08-12). The never-sold counterfactual gets the
+same dividends applied to both sides, so its difference nets them out to a clean price comparison.
+Neither the history nor the benchmark spends a provider call: the payments are recorded and the
+index's dividends come from the same static calendar.
+
+**Surfaces.** `dividend_income` (the sum of payments) rides along on the portfolio payload; a
+`GET /api/dividends` route lists the ledger for the Activity page. The UI adds a "companies have
+paid you $X" line on the overview (already inside the cash and total, so a highlight not a separate
+pot), a dividends table on Activity, a first-time explainer, and `dividend` / `ex-dividend date`
+glossary terms. Every figure is code-computed; the words are static copy (hard rule #1).
 
 ## Secrets and config
 

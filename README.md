@@ -164,8 +164,11 @@ The reasoning behind each of these is in [docs/decisions.md](docs/decisions.md).
 
 Deliberate scope calls for a teaching demo, not oversights:
 
-- **No corporate actions.** Stock splits and dividends aren't modeled, so a split would show a holder
-  a distorted position until it works through. Fine over a demo's lifetime; real for a long-lived one.
+- **Dividends are modeled from a curated calendar, splits aren't.** No free data tier serves
+  dividend history, so dividends (companies paying you to hold) come from a small checked-in calendar
+  for the demo symbols, credited to cash when you've held through an ex-date; an off-list ticker
+  simply pays none. Stock splits still aren't modeled, so a split would distort a holder's position
+  until it works through. Both are swappable for a real feed; fine over a demo's lifetime.
 - **Orders fill against the last price outside market hours.** A "market" order placed on a weekend
   fills at Friday's close. The app is a teaching tool, not a live execution venue.
 - **Limit orders settle lazily.** There's no background job by design; a resting order is checked when

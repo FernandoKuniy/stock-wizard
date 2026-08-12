@@ -183,7 +183,76 @@ Explicit non-goals for this milestone (a portfolio demo, not a public product):
 - Error tracking (Sentry) and a password-reset flow: considered and deferred, not worth the setup
   for an invite-only demo.
 
+## M7. Dividends
+
+Companies pay you to hold their stock. This was the biggest teaching gap: it rewards the same
+patience the badges already teach, and it makes money show up in the account for doing nothing.
+
+- [x] Dividend data behind a swappable provider in `services/market/`. No free tier serves it
+      (Finnhub's is premium, Twelve Data's needs the paid Grow plan), so a curated, checked-in
+      calendar covers the demo symbols; the provider is a drop-in swap for a live feed later.
+- [x] `dividend_payments` table (migration 0008, RLS on). A cash event of its own, not a
+      transaction, unique on (account, symbol, ex_date) so it's paid exactly once.
+- [x] Lazy settlement on dashboard load, like the order sweep: pays for shares held before the
+      ex-date, reconstructed from the transaction ledger. Idempotent, cleared by a reset.
+- [x] Folded into the performance history so the line's last point matches the dashboard total,
+      and into the benchmark (the S&P line now accrues its own dividends) so the comparison stays
+      an honest total-return one rather than flattering the dividend collector.
+- [x] `dividend_income` on the portfolio payload and a `/api/dividends` ledger. UI: a "companies
+      have paid you $X" line on the overview, a dividends section on Activity, first-time
+      explainers, and `dividend` / `ex-dividend date` glossary terms.
+
+## M8. Recurring investing (dollar-cost averaging, by doing)
+
+- [ ] "Invest $X every month" schedules, settled lazily on dashboard load through the same
+      `fill_buy` primitive; pause-with-a-reason on insufficient funds. Pairs with the existing DCA
+      what-if as the teaching moment. Monthly/weekly only (no daily; that teaches noise-watching).
+
+## M9. Realized vs unrealized
+
+- [ ] A pure walk of the ledger splitting locked-in gains, paper gains, and dividend income, so a
+      beginner stops conflating "made on paper" with "money I actually have". A tutor tool too.
+
+## M10. Tutor streaming
+
+- [ ] Stream the tutor's final answer token by token (tools still resolve server-side first). The
+      provenance guard runs on the assembled text. Keep the non-streaming path as a fallback.
+
+## M11. Proactive tutor explanations
+
+- [ ] "Explain this" on the check-up findings, what-moved, never-sold and the realized breakdown.
+      The tutor fetches the authoritative finding by key (numbers from code), so it stays inside
+      hard rule #2: it explains an existing fact, never volunteers an opinion.
+
+## M12. Frontend and E2E tests
+
+- [ ] Vitest + Testing Library over `lib/` and the presentational components (runs in CI, no
+      backend). Plus a Playwright smoke (sign in, buy, see it on the overview) against a running
+      stack, gated on a test Supabase project, to close the "signed-in click-through" step for good.
+
+Explicit non-goals across M7-M12 (same reasoning the earlier ones use): real-time websocket price
+ticking (contradicts calm mode), forward return projections (edge toward advice), and Redis or any
+shared-cache infrastructure (over-engineering for an invite-only demo).
+
 ## Progress log
+
+- 2026-08-12  **M7 (dividends) complete.** Companies now pay the account for holding their stock.
+  The spike found no free dividend feed (Finnhub's endpoint is premium, Twelve Data's needs the
+  paid Grow plan), so dividends come from a **curated, checked-in calendar** for the demo symbols
+  behind a swappable `DividendProvider`, a drop-in for a real feed later (see decisions.md). New
+  `dividend_payments` table (migration 0008, RLS on), a **cash event of its own, not a
+  transaction**, unique on (account, symbol, ex_date). Settlement is **lazy on dashboard load**
+  like the order sweep: it pays for shares held *before* each ex-date (reconstructed from the
+  ledger), is idempotent, and is cleared by a reset. The money is folded into the performance
+  history so the line's endpoint matches the dashboard total, and the **benchmark now accrues the
+  index's own dividends** so "vs the S&P" stays an honest total-return comparison instead of
+  flattering the dividend collector (a deliberate change to what that chart means; see
+  decisions.md). New `dividend_income` on the portfolio payload and a `/api/dividends` ledger; UI
+  adds a "companies have paid you $X" line on the overview, a dividends section on Activity, a
+  first-time explainer, and two glossary terms. 349 backend tests green (30 new); ruff + mypy
+  clean; web passes eslint + prettier + tsc + a production build. Also opened M7-M12 in this doc.
+  Signed-in click-through still pending (M12 will automate it).
+- 2026-07-28  M6 opened (ship it as a portfolio demo), and the security hardening that started
 
 - 2026-07-28  M6 opened (ship it as a portfolio demo), and the security hardening that started
   it is done. **Enabled RLS on every table and closed the public Supabase Data API**, which was
