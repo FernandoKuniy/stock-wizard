@@ -1,3 +1,4 @@
+import { Term } from "@/components/Term";
 import type { Portfolio } from "@/lib/api";
 import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
 
@@ -48,6 +49,17 @@ export function PortfolioSummary({ portfolio }: { portfolio: Portfolio }) {
           </div>
         </div>
       </div>
+      {/* Only once something has actually paid out. It's already inside the cash and total
+          above, so this is a highlight, not a separate pot: money that showed up for holding. */}
+      {portfolio.dividend_income > 0 && (
+        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+          Companies have paid you{" "}
+          <span className="calm font-medium text-green-600">
+            {formatMoney(portfolio.dividend_income)}
+          </span>{" "}
+          in <Term name="dividend">dividends</Term> just for holding their stock.
+        </p>
+      )}
     </div>
   );
 }

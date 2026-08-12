@@ -56,6 +56,21 @@ export type Portfolio = {
   // True while this is the demo sample we seeded a new account with, so the UI can offer
   // "hit reset to start your own". A reset clears it.
   is_sample: boolean;
+  // Every dividend dollar this account has been paid for holding its stocks. Already part of
+  // `cash` and `total_value`; surfaced on its own so the UI can teach that some of the money
+  // arrived just for holding. Zero until something has paid out.
+  dividend_income: number;
+};
+
+// One dividend paid into the account for holding a stock through its ex-date. `shares` and
+// `per_share` explain the payment ("12.5 shares at $0.51"); `amount` is the cash that landed.
+export type Dividend = {
+  symbol: string;
+  ex_date: string;
+  per_share: number;
+  shares: number;
+  amount: number;
+  paid_at: string;
 };
 
 // One observation about how your money is spread out. "notable" means worth understanding,
@@ -294,6 +309,10 @@ export const getPortfolioHistory = (token: Token, period: HistoryPeriod = "all")
   request<PortfolioHistory>(`/api/portfolio/history?period=${period}`, token);
 
 export const getTransactions = (token: Token) => request<Transaction[]>("/api/transactions", token);
+
+// A pure read: dividends are settled when the dashboard loads (getPortfolio), so this just
+// lists what's already been paid and spends no market-data call.
+export const getDividends = (token: Token) => request<Dividend[]>("/api/dividends", token);
 
 export const resetAccount = (token: Token) =>
   request<Portfolio>("/api/account/reset", token, { method: "POST" });

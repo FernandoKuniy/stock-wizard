@@ -1,14 +1,17 @@
 import { redirect } from "next/navigation";
 
+import { DividendsList } from "@/components/DividendsList";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { OpenOrders } from "@/components/OpenOrders";
 import { TransactionsTable } from "@/components/TransactionsTable";
 import { Watchlist } from "@/components/Watchlist";
 import {
+  getDividends,
   getOrders,
   getTransactions,
   getWatchlist,
   isInviteRequired,
+  type Dividend,
   type Order,
   type Transaction,
   type WatchlistItem,
@@ -55,6 +58,15 @@ export default async function ActivityPage() {
     watchlist = [];
   }
 
+  // Dividends are already settled by the overview load; this just lists them. A failure here
+  // simply hides the section, like the watchlist.
+  let dividends: Dividend[] = [];
+  try {
+    dividends = await getDividends(token);
+  } catch {
+    dividends = [];
+  }
+
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
       <div className="space-y-6">
@@ -78,6 +90,18 @@ export default async function ActivityPage() {
             <p className="px-4 py-3 text-sm text-zinc-500">
               Nothing yet. Open a stock and hit Watch to keep an eye on it without buying it.
             </p>
+          </section>
+        )}
+
+        {dividends.length > 0 && (
+          <section className="space-y-3">
+            <FirstTimeCallout id="dividends" title="Money for holding">
+              Some companies share their profits with the people who own their stock. You
+              didn&apos;t do anything to earn these; the cash just landed because you were holding
+              on the right day. It&apos;s already counted in your total.
+            </FirstTimeCallout>
+            <h2 className="text-sm font-medium">Dividends you&apos;ve been paid</h2>
+            <DividendsList dividends={dividends} />
           </section>
         )}
 

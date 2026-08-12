@@ -13,8 +13,14 @@ export const GLOSSARY = {
   "P/E ratio":
     "The share price divided by the company's yearly profit per share. Roughly: how many years of today's profits you're paying for. A high number means people expect the company to grow.",
 
+  dividend:
+    "A cash payment some companies send you just for holding their stock, usually every few months. You don't have to do anything: own the shares before the pay-out date and the money lands in your account.",
+
   "dividend yield":
     "Some companies pay you a slice of their profits just for holding the shares. The yield is how much that adds up to in a year, as a percent of the share price.",
+
+  "ex-dividend date":
+    "The cutoff for a dividend. You have to own the stock before this day to get the next pay-out; buy on it or after and you miss that one.",
 
   volume:
     "How many shares changed hands today. Heavy volume means a lot of people are trading it, which usually means something happened.",
