@@ -397,6 +397,33 @@ def test_a_reset_clears_recurring(client: TestClient) -> None:
     assert client.get("/api/recurring").json() == []
 
 
+# --- returns breakdown -------------------------------------------------------------------
+# The realized math is unit-tested in test_realized.py; this proves the split is on the payload
+# and reconciles: realized + unrealized + dividends == total_gain_loss.
+
+
+def test_realized_and_unrealized_reconcile_to_the_total(
+    client: TestClient, market: FakeMarket
+) -> None:
+    client.get("/api/portfolio")  # opens the account
+    client.post(
+        "/api/orders",
+        json={"symbol": "AAPL", "side": "buy", "mode": "shares", "value": 10, "type": "market"},
+    )
+    market._prices["AAPL"] = 200.0  # the price rises after the buy
+    client.post(
+        "/api/orders",
+        json={"symbol": "AAPL", "side": "sell", "mode": "shares", "value": 4, "type": "market"},
+    )
+
+    p = client.get("/api/portfolio").json()
+    assert p["realized_gain"] == 200.0  # 4 sold * (200 - 150)
+    assert p["unrealized_gain"] == 300.0  # 6 held * (200 - 150)
+    assert p["dividend_income"] == 0.0
+    assert p["total_gain_loss"] == 500.0
+    assert p["realized_gain"] + p["unrealized_gain"] + p["dividend_income"] == p["total_gain_loss"]
+
+
 # --- the invite gate ---------------------------------------------------------------------
 # By default (every test above) no code is configured, so accounts open on first sign-in.
 # These turn the gate on and prove a signed-in user can't touch the app until they redeem.

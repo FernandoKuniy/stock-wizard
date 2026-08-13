@@ -23,7 +23,7 @@ from models import Account, User
 from services.market.candles import CandlePoint, Candles
 from services.market.client import CompanyProfile, MarketError, NewsItem, Quote
 from services.sim.accounts import get_or_create_account
-from services.sim.engine import buy
+from services.sim.engine import buy, sell
 from services.tutor.engine import Turn, run_tutor
 from services.tutor.guard import unaccounted_numbers
 from services.tutor.provider import (
@@ -170,6 +170,25 @@ def test_concentration_of_a_single_holding(db_session: Session) -> None:
     assert result["biggest_position"] == "AAPL"
     assert result["biggest_position_weight_percent"] == 100.0  # of the holdings
     assert result["sector_weights_percent"] == {"Technology": 100.0}
+
+
+def test_returns_breakdown_splits_realized_unrealized_and_reconciles(db_session: Session) -> None:
+    market, candles = FakeMarket(), FakeCandles()
+    account = _account_holding_aapl(db_session, market)  # 10 AAPL bought at 150
+    market._prices["AAPL"] = 200.0  # price rises
+    sell(db_session, account, "AAPL", quantity=Decimal(4), market=market)  # lock in 4 * (200-150)
+
+    result = _tool(db_session, account, market, candles, "get_returns_breakdown").run({})
+
+    assert result["realized_gain"] == 200.0  # 4 * (200 - 150)
+    assert result["unrealized_gain"] == 300.0  # 6 held * (200 - 150)
+    assert result["dividend_income"] == 0.0
+    # The parts add up to the total the summary reports.
+    assert result["total_gain_loss"] == 500.0
+    assert (
+        result["realized_gain"] + result["unrealized_gain"] + result["dividend_income"]
+        == result["total_gain_loss"]
+    )
 
 
 def test_benchmark_comparison_matches_the_history_math(db_session: Session) -> None:
