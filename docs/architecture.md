@@ -680,6 +680,32 @@ on Activity with pause/resume/cancel, both tied to the existing dollar-cost-aver
 and what-if. No new provider and no new market-data cost: a run fills at a quote the dashboard
 fetches anyway.
 
+## Realized vs unrealized (M9)
+
+Beginners conflate a gain "on paper" (still riding on what they hold) with money they've actually
+made. This splits the account's total gain into where it came from, so the difference is legible.
+Pure numbers-layer work: no new table, no new market-data call.
+
+- **`services/analysis/realized.py`** is the pure math. `realized_pnl(fills)` replays an account's
+  buys and sells in order, tracking a weighted average cost **the same way the sim's engine does**,
+  and books `shares * (price - average_cost)` on every sell. A sell leaves the average untouched
+  (so it locks in against the blended price actually paid), and selling a position to nothing and
+  buying back resets it, matching how the live holding's `avg_cost` behaves. `Fill` is a read-only
+  Protocol, so a `Transaction` row satisfies it directly.
+- **`build_returns` in `services/portfolio.py`** is the shared composer (used by the route and the
+  tutor, so the figures can't drift). It returns realized (from the ledger), unrealized (summed off
+  the same snapshot the dashboard shows, a failed quote carried at cost like everywhere else), and
+  dividends (the figure the caller already holds). By construction these **reconcile to
+  `total_gain_loss`**: realized + unrealized + dividends is the same "how am I doing" number, shown
+  as its parts. A test asserts the identity at both the analysis and API levels.
+
+`realized_gain` and `unrealized_gain` ride along on the `/api/portfolio` payload rather than taking
+their own route, because unlike the check-up they spend no extra quota (the same rule that lets the
+achievements ride along). A `get_returns_breakdown` tutor tool exposes the split so the tutor can
+narrate it, and a "Where your gain comes from" card renders it on Holdings with `realized gain` /
+`unrealized gain` glossary terms. The framing is understanding, not a verdict, the same line the
+check-up holds: it explains what you've banked versus what's on paper, and never says buy or sell.
+
 ## Secrets and config
 
 - `FINNHUB_API_KEY`, `DATABASE_URL`, and `OPENAI_API_KEY` (the tutor's LLM) live in `api/.env`,

@@ -220,8 +220,16 @@ The habit the app most wants to teach, made real: automate a fixed buy on a sche
 
 ## M9. Realized vs unrealized
 
-- [ ] A pure walk of the ledger splitting locked-in gains, paper gains, and dividend income, so a
-      beginner stops conflating "made on paper" with "money I actually have". A tutor tool too.
+Beginners conflate a gain "on paper" with money they've actually made. This splits the account's
+total gain into where it came from, so they can tell the difference.
+
+- [x] Pure `services/analysis/realized.py`: replays the ledger with the same average-cost method
+      the sim uses and books a realized gain on every sell. No new table, no provider call.
+- [x] `build_returns` composer (shared by the route and the tutor) splits the total into realized
+      + unrealized + dividends, which reconcile to `total_gain_loss` by construction.
+- [x] `realized_gain` / `unrealized_gain` on the portfolio payload (rides along, no extra cost),
+      a `get_returns_breakdown` tutor tool, a "Where your gain comes from" card on Holdings, and
+      `realized gain` / `unrealized gain` glossary terms. Framed as understanding, never a verdict.
 
 ## M10. Tutor streaming
 
@@ -246,6 +254,18 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-13  **M9 (realized vs unrealized) complete.** Splits the account's total gain into where
+  it came from, so a beginner can tell money they've banked from a gain that's only on paper. New
+  pure `services/analysis/realized.py` replays the ledger with the **same average-cost method the
+  sim's engine uses** and books a realized gain on every sell (no new table, no provider call). A
+  shared `build_returns` composer in `services/portfolio.py` splits the total into **realized +
+  unrealized + dividends**, which reconcile to `total_gain_loss` by construction (asserted in the
+  tests). `realized_gain` and `unrealized_gain` ride along on the `/api/portfolio` payload (no
+  extra provider cost, so no separate route), a `get_returns_breakdown` tutor tool lets the tutor
+  narrate the split within hard rule #1, and a "Where your gain comes from" card lands on Holdings
+  with two new glossary terms; the copy explains, never judges. 386 backend tests green (11 new,
+  including the reconciliation identity at both the analysis and API levels); ruff + mypy clean;
+  web passes eslint + prettier + tsc + a production build.
 - 2026-08-13  **M8 (recurring investing) complete.** Automatic investing, the habit the app most
   wants to teach, made real: "put $X into this stock every week/month". New
   `recurring_investments` table (migration 0009, RLS on) and `services/sim/recurring.py`. It

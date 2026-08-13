@@ -56,6 +56,12 @@ architecture.md ("The invite gate") for how it's enforced.
   fact ("companies have paid you $X for holding"), never a reason to buy a high-yield stock (hard
   rule #2). No free data feed serves dividends, so the hosted demo covers its sample symbols from a
   curated calendar; see architecture.md and decisions.md (2026-08-12).
+- Realized vs unrealized: splitting the account's total gain into money locked in by selling, gain
+  still on paper in what's held, and dividends received. Beginners conflate "up on paper" with
+  "money I've made", and reading a paper gain as banked is exactly what tempts someone to sell too
+  soon or hold too long for the wrong reason. Shown as the same total broken into its parts, framed
+  as understanding rather than a verdict (like the check-up, it never says buy or sell). Pure
+  ledger math, no new data. See architecture.md.
 - Recurring investing: automating a fixed buy on a schedule ("put $50 into this every month").
   This is the good habit the app most wants to teach, made real rather than just described: the
   same amount goes in regularly, hands-off. It reinforces "invest steadily and leave it alone", the
