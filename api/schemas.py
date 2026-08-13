@@ -30,6 +30,38 @@ class OrderRequest(BaseModel):
     limit_price: Decimal | None = None
 
 
+class RecurringRequest(BaseModel):
+    """Set up an automatic investment: a fixed dollar amount into a symbol, weekly or monthly."""
+
+    symbol: str
+    amount: Decimal
+    cadence: Literal["weekly", "monthly"]
+
+
+class RecurringUpdate(BaseModel):
+    """Pause (``active`` false) or resume (``active`` true) an automatic investment."""
+
+    active: bool
+
+
+class RecurringOut(BaseModel):
+    """One automatic-investment schedule.
+
+    ``next_run_on`` is when the next buy is due; ``last_run_on`` is when one last fired (null
+    until the first). ``paused_reason`` is set only when we paused it because the cash was gone.
+    """
+
+    id: int
+    symbol: str
+    amount: float
+    cadence: str
+    next_run_on: date
+    last_run_on: date | None
+    active: bool
+    paused_reason: str | None
+    created_at: datetime
+
+
 class QuoteOut(BaseModel):
     symbol: str
     price: float

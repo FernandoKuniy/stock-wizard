@@ -39,6 +39,7 @@ from schemas import (
 )
 from services.achievements import EarnedBadge, award_achievements
 from services.analysis.history import CashCredit, SharePayout, ValuePoint
+from services.market.client import MarketClient
 from services.market.dividends import DividendProvider
 from services.portfolio import (
     HoldingView,
@@ -50,6 +51,7 @@ from services.portfolio import (
     build_snapshot,
 )
 from services.sim import dividends as sim_dividends
+from services.sim import recurring as sim_recurring
 
 # How far back the performance chart looks. "all" is the account's whole life and stays the
 # default, so the tutor and anyone else calling this still get the since-you-started answer.
@@ -68,11 +70,13 @@ def read_portfolio(
 ) -> PortfolioOut:
     """The dashboard payload: holdings, totals, and gain/loss, all computed in code.
 
-    Loading the dashboard is also when resting limit orders settle and dividends are paid, on
-    the same lazy, no-cron schedule: the user looks at their money, so we bring it up to date.
-    Dividends are swept before the snapshot so the cash it values already includes them.
+    Loading the dashboard is also when resting limit orders settle, automatic investments run,
+    and dividends are paid, on the same lazy, no-cron schedule: the user looks at their money, so
+    we bring it up to date. Recurring buys run before dividends and the snapshot so the cash and
+    holdings they value already include everything settled this load.
     """
     _sweep_orders(session, account, market)
+    _sweep_recurring(session, account, market)
     _sweep_dividends(session, account, dividends)
     holdings = list(
         session.scalars(
@@ -236,6 +240,17 @@ def read_dividends(account: AccountDep, session: SessionDep) -> list[DividendOut
         .order_by(DividendPayment.ex_date.desc(), DividendPayment.id.desc())
     )
     return [_dividend_out(payment) for payment in rows]
+
+
+def _sweep_recurring(session: Session, account: Account, market: MarketClient) -> None:
+    """Fire any automatic investment whose next run has come due.
+
+    The recurring counterpart of the order sweep: no background job, settled when the user loads
+    their money. Committing inside a GET is deliberate, since a buy is a real change to the
+    account. A schedule that fired nothing leaves the load a pure read.
+    """
+    if sim_recurring.sweep(session, account, market):
+        session.commit()
 
 
 def _sweep_dividends(session: Session, account: Account, provider: DividendProvider) -> None:

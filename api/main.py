@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from config import get_settings
-from routers import account, orders, portfolio, stock, tutor, watchlist
+from routers import account, orders, portfolio, recurring, stock, tutor, watchlist
 from routers.common import SessionDep
 
 app = FastAPI(title="Stock Wizard API")
@@ -54,5 +54,6 @@ app.include_router(stock.router)
 app.include_router(portfolio.router)
 app.include_router(orders.router)
 app.include_router(watchlist.router)
+app.include_router(recurring.router)
 app.include_router(tutor.router)
 app.include_router(account.router)
