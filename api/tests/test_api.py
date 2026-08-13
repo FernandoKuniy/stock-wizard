@@ -256,6 +256,10 @@ def test_readiness_check_pings_the_database(anon_client: TestClient) -> None:
         ("delete", "/api/watchlist/AAPL"),
         ("get", "/api/orders"),
         ("delete", "/api/orders/1"),
+        ("post", "/api/recurring"),
+        ("get", "/api/recurring"),
+        ("patch", "/api/recurring/1"),
+        ("delete", "/api/recurring/1"),
     ],
 )
 def test_account_routes_require_a_token(anon_client: TestClient, method: str, path: str) -> None:
@@ -328,6 +332,69 @@ def test_a_reset_clears_dividends(client: TestClient, db_session: Session) -> No
 
     assert after["dividend_income"] == 0.0
     assert client.get("/api/dividends").json() == []
+
+
+# --- recurring investments ---------------------------------------------------------------
+# The sweep is unit-tested in test_recurring.py; these prove it's wired into the routes: set up,
+# fires on dashboard load, paused schedules stay put, and a reset clears them.
+
+
+def test_a_recurring_buy_runs_when_the_dashboard_loads(
+    client: TestClient, db_session: Session
+) -> None:
+    assert client.get("/api/portfolio").status_code == 200  # opens the account
+    created = client.post(
+        "/api/recurring", json={"symbol": "AAPL", "amount": 600, "cadence": "monthly"}
+    )
+    assert created.status_code == 200
+    assert created.json()["active"] is True
+
+    portfolio = client.get("/api/portfolio").json()
+    holding = next((h for h in portfolio["holdings"] if h["symbol"] == "AAPL"), None)
+    assert holding is not None
+    assert holding["quantity"] == 4.0  # $600 at $150
+    assert portfolio["cash"] == 99400.0  # 100,000 - 600
+
+    # The next run is a month out, so loading again doesn't buy a second time.
+    assert client.get("/api/portfolio").json()["cash"] == 99400.0
+
+
+def test_recurring_can_be_paused_resumed_and_cancelled(client: TestClient) -> None:
+    client.get("/api/portfolio")
+    created = client.post(
+        "/api/recurring", json={"symbol": "AAPL", "amount": 600, "cadence": "monthly"}
+    ).json()
+    sid = created["id"]
+
+    paused = client.patch(f"/api/recurring/{sid}", json={"active": False}).json()
+    assert paused["active"] is False
+    # A paused schedule doesn't fire when the dashboard loads.
+    assert client.get("/api/portfolio").json()["cash"] == 100000.0
+
+    resumed = client.patch(f"/api/recurring/{sid}", json={"active": True}).json()
+    assert resumed["active"] is True
+    assert len(client.get("/api/recurring").json()) == 1
+
+    assert client.delete(f"/api/recurring/{sid}").status_code == 204
+    assert client.get("/api/recurring").json() == []
+
+
+def test_recurring_rejects_a_symbol_it_cannot_price(client: TestClient, market: FakeMarket) -> None:
+    client.get("/api/portfolio")
+    market.failing.add("ZZZZ")
+    resp = client.post(
+        "/api/recurring", json={"symbol": "ZZZZ", "amount": 600, "cadence": "monthly"}
+    )
+    assert resp.status_code == 502
+
+
+def test_a_reset_clears_recurring(client: TestClient) -> None:
+    client.get("/api/portfolio")
+    client.post("/api/recurring", json={"symbol": "AAPL", "amount": 600, "cadence": "monthly"})
+
+    client.post("/api/account/reset")
+
+    assert client.get("/api/recurring").json() == []
 
 
 # --- the invite gate ---------------------------------------------------------------------
