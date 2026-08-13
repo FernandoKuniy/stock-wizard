@@ -26,7 +26,7 @@ from typing import Protocol
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from models import Account, DividendPayment, Holding, Order, Transaction
+from models import Account, DividendPayment, Holding, Order, RecurringInvestment, Transaction
 from services.market.client import Quote
 
 _SHARES = Decimal("0.000001")  # 6dp, matches holdings.quantity
@@ -132,12 +132,18 @@ def reset(session: Session, account: Account) -> None:
 
     Orders go first: a filled one points at the transaction it became, so the trades cannot
     be deleted out from under it. Dividend payments go too, since they are money this account
-    earned on holdings it no longer has. The watchlist deliberately survives a reset, since it
-    is a list of things to look at rather than anything to do with money.
+    earned on holdings it no longer has, and recurring schedules go, since they are the account's
+    own standing instructions. The watchlist deliberately survives a reset, since it is a list of
+    things to look at rather than anything to do with money.
     """
     session.execute(
         delete(Order)
         .where(Order.account_id == account.id)
+        .execution_options(synchronize_session=False)
+    )
+    session.execute(
+        delete(RecurringInvestment)
+        .where(RecurringInvestment.account_id == account.id)
         .execution_options(synchronize_session=False)
     )
     session.execute(
