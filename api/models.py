@@ -64,6 +64,9 @@ class Account(Base):
     orders: Mapped[list[Order]] = relationship(back_populates="account")
     achievements: Mapped[list[Achievement]] = relationship(back_populates="account")
     dividend_payments: Mapped[list[DividendPayment]] = relationship(back_populates="account")
+    recurring_investments: Mapped[list[RecurringInvestment]] = relationship(
+        back_populates="account"
+    )
 
 
 class Holding(Base):
@@ -174,6 +177,39 @@ class DividendPayment(Base):
     paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="dividend_payments")
+
+
+class RecurringInvestment(Base):
+    """A standing instruction to put a fixed dollar amount into a symbol on a schedule.
+
+    Dollar-cost averaging, made real: instead of a one-off buy, the account invests the same
+    amount every week or month. Like the limit orders it settles lazily with no background job:
+    when the user loads their dashboard, the sweep fires every run that has come due, filling at
+    the latest quote through the same ``fill_buy`` the manual buys use. A run the account can't
+    afford pauses the schedule with a reason rather than overdrawing it, and the user can resume
+    it later. ``next_run_on`` is the next date a run is due, advanced by the cadence each time one
+    fires; ``last_run_on`` records when one last did, for the UI. Schedules are the user's own
+    standing config, so a reset clears them like the orders (see services/sim/recurring.py)."""
+
+    __tablename__ = "recurring_investments"
+    __table_args__ = (
+        CheckConstraint("cadence in ('weekly', 'monthly')", name="ck_recurring_cadence"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    cadence: Mapped[str] = mapped_column(String(16))
+    next_run_on: Mapped[date] = mapped_column(Date())
+    last_run_on: Mapped[date | None] = mapped_column(Date(), default=None)
+    active: Mapped[bool] = mapped_column(Boolean(), default=True, server_default=text("true"))
+    # Why we paused it on the user's behalf (the cash was gone when a run came due), so the UI
+    # can explain rather than just show it stopped. None while running or when paused by hand.
+    paused_reason: Mapped[str | None] = mapped_column(String(200), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped[Account] = relationship(back_populates="recurring_investments")
 
 
 class WatchlistItem(Base):
