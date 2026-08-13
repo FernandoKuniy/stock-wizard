@@ -5,6 +5,7 @@ import { AllocationChart } from "@/components/AllocationChart";
 import { Checkup } from "@/components/Checkup";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { HoldingsTable } from "@/components/HoldingsTable";
+import { ReturnsBreakdown } from "@/components/ReturnsBreakdown";
 import {
   getCheckup,
   getPortfolio,
@@ -71,6 +72,7 @@ export default async function HoldingsPage() {
               </FirstTimeCallout>
             )}
             <Checkup findings={checkup} />
+            <ReturnsBreakdown portfolio={portfolio} />
             <AllocationChart portfolio={portfolio} />
             <HoldingsTable holdings={portfolio.holdings} />
           </>

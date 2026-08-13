@@ -60,6 +60,11 @@ export type Portfolio = {
   // `cash` and `total_value`; surfaced on its own so the UI can teach that some of the money
   // arrived just for holding. Zero until something has paid out.
   dividend_income: number;
+  // The total gain split by where it came from. `realized_gain` is money locked in by selling;
+  // `unrealized_gain` is the gain still on paper in what's held. With `dividend_income` these
+  // add up to `total_gain_loss` (all computed server-side; the frontend only lays them out).
+  realized_gain: number;
+  unrealized_gain: number;
 };
 
 // One dividend paid into the account for holding a stock through its ex-date. `shares` and

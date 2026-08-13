@@ -48,6 +48,12 @@ export const GLOSSARY = {
   "gain/loss":
     "The difference between what your shares are worth now and what you paid. It's only on paper until you sell.",
 
+  "realized gain":
+    "Profit or loss you've actually locked in by selling. Once you sell, it's real money sitting in your cash, not just a number that moves around.",
+
+  "unrealized gain":
+    "Profit or loss that only exists on paper, because you still hold the shares. It changes every day and doesn't become real until you sell.",
+
   allocation:
     "How your money is split up across the things you own. If one stock is most of your money, that's a big bet on one company.",
 
