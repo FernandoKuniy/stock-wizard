@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import Account, Holding, Transaction
+from models import Account, DividendPayment, Holding, Transaction
 from services.analysis.portfolio import (
     position_cost_basis,
     position_gain_loss,
@@ -30,6 +30,7 @@ from services.portfolio import (
     CandleProvider,
     MissingHistory,
     build_history,
+    build_returns,
     build_sectors,
     build_snapshot,
 )
@@ -164,14 +165,35 @@ def build_tools(
             "sector_weights_percent": {s: _money(w) for s, w in signal.sector_weights.items()},
         }
 
-    def get_benchmark_comparison(_args: dict[str, Any]) -> dict[str, Any]:
-        rows = list(
+    def account_transactions() -> list[Transaction]:
+        return list(
             session.scalars(
                 select(Transaction)
                 .where(Transaction.account_id == account.id)
-                .order_by(Transaction.timestamp)
+                .order_by(Transaction.timestamp, Transaction.id)
             )
         )
+
+    def dividend_income() -> Decimal:
+        amounts = session.scalars(
+            select(DividendPayment.amount).where(DividendPayment.account_id == account.id)
+        )
+        return sum(amounts, Decimal(0))
+
+    def get_returns_breakdown(_args: dict[str, Any]) -> dict[str, Any]:
+        snapshot = build_snapshot(
+            holdings(), account.cash_balance, account.starting_balance, market
+        )
+        returns = build_returns(snapshot, account_transactions(), dividend_income())
+        return {
+            "realized_gain": _money(returns.realized),
+            "unrealized_gain": _money(returns.unrealized),
+            "dividend_income": _money(returns.dividends),
+            "total_gain_loss": _money(returns.total),
+        }
+
+    def get_benchmark_comparison(_args: dict[str, Any]) -> dict[str, Any]:
+        rows = account_transactions()
         try:
             history = build_history(
                 rows,
@@ -276,6 +298,20 @@ def build_tools(
                 parameters=_NO_ARGS,
             ),
             run=get_concentration,
+        ),
+        Tool(
+            schema=ToolSchema(
+                name="get_returns_breakdown",
+                description=(
+                    "The account's total gain split into where it came from: realized (money "
+                    "locked in by selling), unrealized (gain still on paper in what's held now), "
+                    "and dividends received. The three add up to the total gain. Call this when "
+                    "the user asks how much they've actually made, what they've banked versus "
+                    "what's only on paper, or about profit they've locked in."
+                ),
+                parameters=_NO_ARGS,
+            ),
+            run=get_returns_breakdown,
         ),
         Tool(
             schema=ToolSchema(
