@@ -10,7 +10,7 @@ export function formatMoney(value: number): string {
 
 export function formatSignedMoney(value: number): string {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${formatMoney(Math.abs(value))}`;
+  return `${sign}${formatMoney(Math.abs(value))} `;
 }
 
 export function formatPercent(value: number): string {
