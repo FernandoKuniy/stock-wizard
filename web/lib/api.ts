@@ -396,6 +396,41 @@ export const getOrders = (token: Token) => request<Order[]>("/api/orders", token
 export const cancelOrder = (id: number, token: Token) =>
   request<Order>(`/api/orders/${id}`, token, { method: "DELETE" });
 
+// An automatic investment: a fixed dollar amount into a symbol every week or month, filled by
+// the same lazy sweep as a limit order when the dashboard loads. `paused_reason` is set only
+// when we paused it because the cash was gone; `last_run_on` is null until the first buy fires.
+export type RecurringCadence = "weekly" | "monthly";
+
+export type Recurring = {
+  id: number;
+  symbol: string;
+  amount: number;
+  cadence: RecurringCadence;
+  next_run_on: string;
+  last_run_on: string | null;
+  active: boolean;
+  paused_reason: string | null;
+  created_at: string;
+};
+
+export const getRecurring = (token: Token) => request<Recurring[]>("/api/recurring", token);
+
+export const createRecurring = (
+  input: { symbol: string; amount: number; cadence: RecurringCadence },
+  token: Token,
+) => request<Recurring>("/api/recurring", token, { method: "POST", body: JSON.stringify(input) });
+
+// Pause (active=false) or resume (active=true) a schedule. Resuming makes the next buy due on
+// the next dashboard load.
+export const updateRecurring = (id: number, active: boolean, token: Token) =>
+  request<Recurring>(`/api/recurring/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ active }),
+  });
+
+export const deleteRecurring = (id: number, token: Token) =>
+  request<void>(`/api/recurring/${id}`, token, { method: "DELETE" });
+
 // The tutor is stateless server-side: the whole thread lives in the browser and is sent back
 // each turn. Numbers in the reply are computed by the backend's tools, never by the model.
 export type TutorMessage = { role: "user" | "assistant"; content: string };

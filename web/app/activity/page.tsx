@@ -3,16 +3,19 @@ import { redirect } from "next/navigation";
 import { DividendsList } from "@/components/DividendsList";
 import { FirstTimeCallout } from "@/components/FirstTimeCallout";
 import { OpenOrders } from "@/components/OpenOrders";
+import { RecurringList } from "@/components/RecurringList";
 import { TransactionsTable } from "@/components/TransactionsTable";
 import { Watchlist } from "@/components/Watchlist";
 import {
   getDividends,
   getOrders,
+  getRecurring,
   getTransactions,
   getWatchlist,
   isInviteRequired,
   type Dividend,
   type Order,
+  type Recurring,
   type Transaction,
   type WatchlistItem,
 } from "@/lib/api";
@@ -67,12 +70,27 @@ export default async function ActivityPage() {
     dividends = [];
   }
 
+  // Automatic investments. A failure just hides the section rather than breaking the page.
+  let recurring: Recurring[] = [];
+  try {
+    recurring = await getRecurring(token);
+  } catch {
+    recurring = [];
+  }
+
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Activity</h1>
 
         <OpenOrders orders={orders} />
+
+        {recurring.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium">Automatic investing</h2>
+            <RecurringList items={recurring} />
+          </section>
+        )}
 
         {watchlist.length > 0 ? (
           <>

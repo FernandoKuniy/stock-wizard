@@ -6,6 +6,7 @@ import { BigMoveNote } from "@/components/BigMoveNote";
 import { NewsFeed } from "@/components/NewsFeed";
 import { OrderForm } from "@/components/OrderForm";
 import { PriceChart } from "@/components/PriceChart";
+import { RecurringForm } from "@/components/RecurringForm";
 import { Term } from "@/components/Term";
 import { TimeMachine } from "@/components/TimeMachine";
 import { WatchlistStar } from "@/components/WatchlistStar";
@@ -170,6 +171,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             cash={cash}
             heldShares={heldShares}
           />
+          <RecurringForm symbol={quote.symbol} />
         </div>
       </div>
     </main>
