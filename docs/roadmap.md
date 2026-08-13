@@ -204,9 +204,19 @@ patience the badges already teach, and it makes money show up in the account for
 
 ## M8. Recurring investing (dollar-cost averaging, by doing)
 
-- [ ] "Invest $X every month" schedules, settled lazily on dashboard load through the same
-      `fill_buy` primitive; pause-with-a-reason on insufficient funds. Pairs with the existing DCA
-      what-if as the teaching moment. Monthly/weekly only (no daily; that teaches noise-watching).
+The habit the app most wants to teach, made real: automate a fixed buy on a schedule.
+
+- [x] `recurring_investments` table (migration 0009, RLS on): amount, cadence, next/last run,
+      active + paused_reason. Weekly/monthly only (no daily; that teaches noise-watching).
+- [x] Lazy sweep on dashboard load through the same `buy`/`fill_buy` as a manual order. One run
+      per load, then realign to the next future date, so a long gap fires once rather than
+      stacking a pile of identical same-price buys. A run the account can't afford pauses with a
+      reason instead of overdrawing; the user can resume it.
+- [x] CRUD routes: create (validates the symbol against a live quote), list, pause/resume
+      (PATCH), cancel (DELETE). Cleared by a reset like the orders.
+- [x] UI: an "Invest automatically" card on the stock page and an "Automatic investing" section
+      on Activity with pause/resume/cancel. Ties to the DCA what-if and glossary term; the
+      what-if keeps the price-averaging lesson, this feature is the habit.
 
 ## M9. Realized vs unrealized
 
@@ -236,6 +246,20 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-13  **M8 (recurring investing) complete.** Automatic investing, the habit the app most
+  wants to teach, made real: "put $X into this stock every week/month". New
+  `recurring_investments` table (migration 0009, RLS on) and `services/sim/recurring.py`. It
+  settles on the **same lazy, no-cron sweep** as the limit orders and dividends, filling through
+  the same `buy`/`fill_buy` a manual order uses. Two deliberate rules (see decisions.md):
+  **one run per load then realign to the future**, so a long gap fires once instead of stacking a
+  pile of identical same-price buys (the price-averaging *lesson* stays in the what-if; this is the
+  habit), and **pause, never overdraw**, so a run the account can't afford pauses with a reason the
+  user can resume. CRUD routes (create validates the symbol against a live quote; list; PATCH to
+  pause/resume; DELETE to cancel), wired into `read_portfolio`'s sweep and cleared by a reset. UI:
+  an "Invest automatically" card on the stock page and an "Automatic investing" section on Activity
+  with pause/resume/cancel, tied to the existing DCA what-if and glossary term. No new provider and
+  no new market-data cost: runs fill at a quote the dashboard fetches anyway. 375 backend tests
+  green (26 new); ruff + mypy clean; web passes eslint + prettier + tsc + a production build.
 - 2026-08-12  **M7 (dividends) complete.** Companies now pay the account for holding their stock.
   The spike found no free dividend feed (Finnhub's endpoint is premium, Twelve Data's needs the
   paid Grow plan), so dividends come from a **curated, checked-in calendar** for the demo symbols

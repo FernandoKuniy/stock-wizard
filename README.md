@@ -174,6 +174,11 @@ Deliberate scope calls for a teaching demo, not oversights:
 - **Limit orders settle lazily.** There's no background job by design; a resting order is checked when
   you next load your portfolio or orders, not continuously. So an order may fill "late" if you don't
   come back for a while.
+- **Recurring investments run on load, and don't stack up.** Automatic investments settle on the same
+  no-background-job schedule: a run fires when you next open your dashboard after it's due, at that
+  day's price. If several came due while you were away, it fires once and realigns to the future
+  rather than deploying a pile of catch-up buys at one price (the price-averaging lesson lives in the
+  what-if calculator instead).
 - **Provider free tiers set a ceiling.** Twelve Data allows 8 candle calls a minute, so an account
   holding more than ~7 distinct symbols can hit the limit on a cold cache. It degrades to a clear
   "couldn't load your history" rather than a wrong chart.

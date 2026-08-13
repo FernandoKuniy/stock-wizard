@@ -50,9 +50,12 @@ real order semantics, Alpaca paper is the fallback, but do not reach for it by d
   a unique constraint on (account_id, symbol, ex_date). One row per dividend an account was paid
   for holding through an ex-date. A cash event of its own, not a transaction (see below). The
   unique constraint makes the lazy settlement idempotent. Added in M7.
+- `recurring_investments`: id, account_id, symbol, amount, cadence (weekly/monthly), next_run_on,
+  last_run_on, active, paused_reason, created_at. A standing instruction to invest a fixed amount
+  on a schedule (dollar-cost averaging). Settled by the lazy sweep on dashboard load. Added in M8.
 
-Reset = set cash_balance back to starting_balance, delete holdings, transactions, orders and
-dividend payments for that account. The watchlist and the achievements deliberately survive:
+Reset = set cash_balance back to starting_balance, delete holdings, transactions, orders,
+dividend payments and recurring schedules for that account. The watchlist and the achievements deliberately survive:
 neither is money, and a badge is a record of something you once did, which a reset doesn't undo.
 Dividend payments are cleared, because they're money the account earned on holdings it no longer has.
 
@@ -644,6 +647,38 @@ index's dividends come from the same static calendar.
 paid you $X" line on the overview (already inside the cash and total, so a highlight not a separate
 pot), a dividends table on Activity, a first-time explainer, and `dividend` / `ex-dividend date`
 glossary terms. Every figure is code-computed; the words are static copy (hard rule #1).
+
+## Recurring investing (M8)
+
+Automating a fixed buy on a schedule: dollar-cost averaging made real. This is the good habit the
+whole product points at ("invest steadily, leave it alone"), so the feature makes it something the
+app *does*, not just something the tutor describes.
+
+**Settlement, in `services/sim/recurring.py`.** A schedule (`recurring_investments`) settles on the
+**same lazy, no-cron sweep** as the limit orders: `sweep` runs inside `GET /api/portfolio`, and a
+schedule whose `next_run_on` has arrived fires through the same `engine.buy` a manual market order
+uses, so the money math stays in one place. Two rules make it honest inside a no-background-job sim:
+
+- **One run per load, then realign to the future** (see decisions.md, 2026-08-13). If several runs
+  came due while the user was away, we don't stack them: the schedule fires once and advances
+  `next_run_on` past today. We can only ever fill at the price we can see now, so a pile of catch-up
+  buys would be identical in price and timestamp, which is both odd and the opposite of what DCA
+  looks like. The price-averaging *lesson* lives in the what-if (which prices instalments across
+  real historical closes); this feature is the **habit**, and skipping a missed stretch is the
+  truthful behaviour for a sim with no job running while you're gone.
+- **Pause, never overdraw.** A run the account can't afford flips the schedule to inactive with a
+  `paused_reason` rather than part-filling or going negative. The user can add cash and resume it;
+  resuming makes the next run due immediately. A symbol that can't be priced right now is left due
+  to try again next load, the same instinct that keeps the limit sweep from executing on missing data.
+
+**Routes and surfaces.** Account-scoped CRUD in `routers/recurring.py`: create (validates the symbol
+against a live quote, so a junk ticker is never stored, like a watchlist add), list, a PATCH to
+pause/resume, and a DELETE to cancel. Cleared by a reset like the orders, since a schedule is the
+user's own standing config, not a record of something that happened. The UI is an "Invest
+automatically" card on the stock page (amount + weekly/monthly) and an "Automatic investing" section
+on Activity with pause/resume/cancel, both tied to the existing dollar-cost-averaging glossary term
+and what-if. No new provider and no new market-data cost: a run fills at a quote the dashboard
+fetches anyway.
 
 ## Secrets and config
 

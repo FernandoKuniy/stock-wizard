@@ -6,6 +6,24 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-13  **Recurring investing settles lazily and fires one run per dashboard load, then
+  realigns to the future.** Like the limit-order and dividend sweeps, there's no background job:
+  when the user loads their dashboard, due schedules fire. But rather than catching up every run
+  missed while they were away, a due schedule fires **once** and advances `next_run_on` to the
+  next date after today. Stacking a backlog would produce a pile of identical buys at one price
+  and one timestamp (we can only ever fill at the price we can see now), which is both odd and the
+  opposite of what dollar-cost averaging looks like. The price-averaging *lesson* already lives in
+  the what-if calculator, which prices instalments across real historical closes; this feature is
+  the **habit** (automating a regular buy), so skipping a missed stretch is the honest behaviour
+  for a no-cron sim. Documented as a limitation.
+- 2026-08-13  **Recurring runs fill at the latest quote and pause rather than overdraw.** A run
+  goes through the same `buy`/`fill_buy` a manual market order does, preserving the invariant that
+  a live order fills at the latest quote and is never handed a price (only the seed backfill does
+  that, and it's not on any route). A run the account can't afford **pauses the schedule with a
+  reason** instead of part-filling or going negative, and the user can add cash and resume it;
+  resuming makes the next run due immediately. Schedules are the user's own standing config, so a
+  reset clears them like the orders, and creation validates the symbol against a live quote so a
+  junk ticker is never stored (the same as a watchlist add).
 - 2026-08-12  **Dividends come from a curated, checked-in calendar behind a swappable provider,
   not a live feed.** Neither free tier we use serves dividend history: Finnhub's `/stock/dividend`
   is premium (the same tier that already dropped candles), and Twelve Data's `/dividends` needs

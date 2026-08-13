@@ -56,6 +56,13 @@ architecture.md ("The invite gate") for how it's enforced.
   fact ("companies have paid you $X for holding"), never a reason to buy a high-yield stock (hard
   rule #2). No free data feed serves dividends, so the hosted demo covers its sample symbols from a
   curated calendar; see architecture.md and decisions.md (2026-08-12).
+- Recurring investing: automating a fixed buy on a schedule ("put $50 into this every month").
+  This is the good habit the app most wants to teach, made real rather than just described: the
+  same amount goes in regularly, hands-off. It reinforces "invest steadily and leave it alone", the
+  opposite of the react-to-a-number behaviour the whole product warns against, and it's the natural
+  companion to the dollar-cost-averaging what-if. Like the limit orders it settles when the user
+  next opens their dashboard (no background job), and it pauses rather than overdraw if the cash
+  isn't there. See architecture.md and decisions.md (2026-08-13).
 
 ## Screens
 
