@@ -47,6 +47,7 @@ from services.analysis.portfolio import (
     position_weights,
     total_gain_loss,
 )
+from services.analysis.realized import realized_pnl
 from services.analysis.risk import concentration
 from services.analysis.whatif import WhatIf, what_if
 from services.market.candles import Candles
@@ -176,6 +177,47 @@ def build_snapshot(
         holdings=views,
         unpriced_symbols=unpriced,
         what_moved=what_moved([Mover(v.symbol, v.gain_loss) for v in views]),
+    )
+
+
+@dataclass(frozen=True)
+class ReturnsBreakdown:
+    """An account's total gain split into where it came from.
+
+    ``realized`` is money locked in by selling; ``unrealized`` is the gain still riding on what's
+    held now; ``dividends`` is cash paid for holding. The three add up to ``total``, which equals
+    the snapshot's ``total_gain_loss``: it's the same "how am I doing" number, shown as its parts
+    so a beginner can tell what they've actually banked from what's still only on paper.
+    """
+
+    realized: Decimal
+    unrealized: Decimal
+    dividends: Decimal
+    total: Decimal
+
+
+def build_returns(
+    snapshot: PortfolioSnapshot,
+    transactions: Sequence[Transaction],
+    dividends: Decimal,
+) -> ReturnsBreakdown:
+    """Split the account's total gain into realized, unrealized, and dividends.
+
+    Realized comes from replaying the ledger (``services/analysis/realized``); unrealized is the
+    gain on what's held now, summed off the same snapshot the dashboard shows (a holding whose
+    quote failed is carried at cost, contributing nothing, exactly as it does to the totals); and
+    dividends is the figure the caller already has. Their sum reconciles to ``total_gain_loss`` by
+    construction, so the parts always agree with the headline number.
+    """
+    realized = realized_pnl(transactions)
+    unrealized = sum(
+        (view.gain_loss for view in snapshot.holdings if view.gain_loss is not None), _ZERO
+    )
+    return ReturnsBreakdown(
+        realized=realized,
+        unrealized=unrealized,
+        dividends=dividends,
+        total=realized + unrealized + dividends,
     )
 
 

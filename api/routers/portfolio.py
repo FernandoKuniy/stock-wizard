@@ -47,6 +47,7 @@ from services.portfolio import (
     PortfolioSnapshot,
     build_checkup,
     build_history,
+    build_returns,
     build_sectors,
     build_snapshot,
 )
@@ -86,6 +87,9 @@ def read_portfolio(
     snapshot = build_snapshot(holdings, account.cash_balance, account.starting_balance, market)
     achievements = _award_achievements(session, account, snapshot)
 
+    dividend_income = sim_dividends.total_dividends(session, account)
+    returns = build_returns(snapshot, _account_transactions(session, account), dividend_income)
+
     return PortfolioOut(
         cash=_round2(snapshot.cash),
         starting_balance=_round2(snapshot.starting_balance),
@@ -99,7 +103,9 @@ def read_portfolio(
         what_moved=snapshot.what_moved,
         achievements=achievements,
         is_sample=account.is_sample,
-        dividend_income=_round2(sim_dividends.total_dividends(session, account)),
+        dividend_income=_round2(dividend_income),
+        realized_gain=_round2(returns.realized),
+        unrealized_gain=_round2(returns.unrealized),
     )
 
 
@@ -262,6 +268,17 @@ def _sweep_dividends(session: Session, account: Account, provider: DividendProvi
     """
     if sim_dividends.sweep(session, account, provider):
         session.commit()
+
+
+def _account_transactions(session: Session, account: Account) -> list[Transaction]:
+    """This account's trades in the order they happened, for the realized-gain replay."""
+    return list(
+        session.scalars(
+            select(Transaction)
+            .where(Transaction.account_id == account.id)
+            .order_by(Transaction.timestamp, Transaction.id)
+        )
+    )
 
 
 def _dividend_credits(session: Session, account: Account) -> list[CashCredit]:

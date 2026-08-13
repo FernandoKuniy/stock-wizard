@@ -251,6 +251,12 @@ class PortfolioOut(BaseModel):
     # part of ``cash`` (and so ``total_value``): it's surfaced on its own so the UI can teach
     # that some of the money arrived just for holding. Zero when nothing has paid out yet.
     dividend_income: float
+    # The total gain split into where it came from. ``realized_gain`` is money locked in by
+    # selling; ``unrealized_gain`` is the gain still on paper in what's held now. With
+    # ``dividend_income`` these three add up to ``total_gain_loss``, the same number shown as its
+    # parts so a beginner can tell what they've banked from what's only on paper.
+    realized_gain: float
+    unrealized_gain: float
 
 
 class HistoryPointOut(BaseModel):
