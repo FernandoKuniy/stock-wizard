@@ -251,6 +251,7 @@ def test_readiness_check_pings_the_database(anon_client: TestClient) -> None:
         ("post", "/api/account/reset"),
         ("post", "/api/orders"),
         ("post", "/api/tutor"),
+        ("post", "/api/tutor/stream"),
         ("get", "/api/watchlist"),
         ("post", "/api/watchlist"),
         ("delete", "/api/watchlist/AAPL"),
@@ -1091,6 +1092,28 @@ def test_tutor_answers_a_signed_in_user(client: TestClient) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["reply"] == "Here's a look at your portfolio."
+
+
+def test_tutor_streams_the_reply_over_sse(client: TestClient) -> None:
+    response = client.post(
+        "/api/tutor/stream", json={"messages": [{"role": "user", "content": "how am I doing?"}]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    body = response.text
+    # The default (non-chunking) FakeTutor sends the whole answer as one delta, then a done event.
+    assert '"delta": "Here\'s a look at your portfolio."' in body
+    assert '"done": true' in body
+
+
+def test_tutor_stream_rejects_an_empty_conversation(client: TestClient) -> None:
+    assert client.post("/api/tutor/stream", json={"messages": []}).status_code == 400
+
+
+def test_tutor_stream_says_so_when_not_configured(client: TestClient) -> None:
+    app.dependency_overrides[get_tutor_provider] = lambda: None
+    body = {"messages": [{"role": "user", "content": "hi"}]}
+    assert client.post("/api/tutor/stream", json=body).status_code == 503
 
 
 def test_tutor_rejects_an_empty_conversation(client: TestClient) -> None:

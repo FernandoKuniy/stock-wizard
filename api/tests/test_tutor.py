@@ -24,7 +24,7 @@ from services.market.candles import CandlePoint, Candles
 from services.market.client import CompanyProfile, MarketError, NewsItem, Quote
 from services.sim.accounts import get_or_create_account
 from services.sim.engine import buy, sell
-from services.tutor.engine import Turn, run_tutor
+from services.tutor.engine import Turn, run_tutor, stream_tutor
 from services.tutor.guard import unaccounted_numbers
 from services.tutor.provider import (
     Completion,
@@ -98,6 +98,22 @@ class Scripted(TutorProvider):
 
     def complete(self, *, system: str, messages: Any, tools: Any) -> Completion:
         return self._completions.pop(0)
+
+
+class StreamingScripted(TutorProvider):
+    """Streams pre-scripted chunks per round and returns a scripted Completion for each.
+
+    Each round is ``(chunks, completion)``: the chunks are yielded as if streamed, and the
+    Completion is what the round resolves to (its tool calls drive the loop).
+    """
+
+    def __init__(self, rounds: list[tuple[list[str], Completion]]) -> None:
+        self._rounds = list(rounds)
+
+    def stream(self, *, system: str, messages: Any, tools: Any) -> Any:
+        chunks, completion = self._rounds.pop(0)
+        yield from chunks
+        return completion
 
 
 def _account(session: Session, email: str) -> Account:
@@ -266,6 +282,43 @@ def test_engine_caps_tool_rounds_and_still_answers(db_session: Session) -> None:
     assert answer.reply == "Final answer."
 
 
+def test_stream_engine_runs_a_tool_then_streams_the_answer_in_chunks(db_session: Session) -> None:
+    market, candles = FakeMarket(), FakeCandles()
+    account = _account_holding_aapl(db_session, market)
+    tools = build_tools(db_session, account, market, candles)
+    provider = StreamingScripted(
+        [
+            # A tool round: it yields no text, just resolves to a tool call.
+            ([], Completion(text="", tool_calls=(ToolCall("c1", "get_portfolio_summary", {}),))),
+            # The answer round streams its text token by token.
+            (
+                ["You've ", "got ", "$98,500."],
+                Completion(text="You've got $98,500.", tool_calls=()),
+            ),
+        ]
+    )
+
+    chunks = list(stream_tutor(provider, tools, [Turn("user", "how am I doing?")]))
+
+    # The tool round forwarded nothing; only the answer streamed, in the pieces it arrived in.
+    assert chunks == ["You've ", "got ", "$98,500."]
+    assert "".join(chunks) == "You've got $98,500."
+
+
+def test_stream_engine_falls_back_to_a_whole_answer_when_the_provider_cant_chunk(
+    db_session: Session,
+) -> None:
+    # A provider that only implements complete() gets the default stream: the whole answer at once.
+    market, candles = FakeMarket(), FakeCandles()
+    account = _account(db_session, "alex@example.com")
+    tools = build_tools(db_session, account, market, candles)
+    provider = Scripted([Completion(text="Here's the picture.", tool_calls=())])
+
+    chunks = list(stream_tutor(provider, tools, [Turn("user", "hi")]))
+
+    assert chunks == ["Here's the picture."]
+
+
 # --- Provider: OpenAI translation (no network) ----------------------------------------------
 
 
@@ -317,6 +370,73 @@ def test_openai_provider_wraps_api_errors() -> None:
     provider = OpenAIProvider(api_key="unused", model="m", client=client)
     with pytest.raises(TutorError):
         provider.complete(system="s", messages=[UserMessage("hi")], tools=[])
+
+
+def _chunk(content: str | None = None, tool_calls: list[Any] | None = None) -> Any:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=SimpleNamespace(content=content, tool_calls=tool_calls))]
+    )
+
+
+def _stream_client(chunks: list[Any]) -> Any:
+    def create(**_kwargs: Any) -> Any:
+        return iter(chunks)
+
+    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+
+def _drain(gen: Any) -> tuple[list[str], Any]:
+    """Pull every yielded chunk out of a generator and capture its return value."""
+    chunks: list[str] = []
+    try:
+        while True:
+            chunks.append(next(gen))
+    except StopIteration as stop:
+        return chunks, stop.value
+
+
+def test_openai_provider_streams_content_deltas() -> None:
+    chunks = [_chunk(content="Hel"), _chunk(content="lo."), _chunk()]  # a trailing empty chunk
+    provider = OpenAIProvider(api_key="unused", model="m", client=_stream_client(chunks))
+
+    deltas, completion = _drain(provider.stream(system="s", messages=[UserMessage("hi")], tools=[]))
+
+    assert deltas == ["Hel", "lo."]  # yielded as they arrived, empties skipped
+    assert completion.text == "Hello."
+    assert completion.tool_calls == ()
+
+
+def test_openai_provider_stitches_streamed_tool_call_fragments() -> None:
+    # OpenAI streams a tool call in pieces: id and name first, then the JSON arguments dribble in.
+    first = SimpleNamespace(
+        index=0, id="c1", function=SimpleNamespace(name="get_portfolio_summary", arguments='{"a":')
+    )
+    second = SimpleNamespace(index=0, id=None, function=SimpleNamespace(name=None, arguments="1}"))
+    chunks = [_chunk(tool_calls=[first]), _chunk(tool_calls=[second])]
+    provider = OpenAIProvider(api_key="unused", model="m", client=_stream_client(chunks))
+
+    deltas, completion = _drain(
+        provider.stream(
+            system="s",
+            messages=[UserMessage("hi")],
+            tools=[ToolSchema("get_portfolio_summary", "desc", _NO_ARGS)],
+        )
+    )
+
+    assert deltas == []  # a tool round carries no content for the user
+    assert completion.text == ""
+    assert completion.tool_calls[0].name == "get_portfolio_summary"
+    assert completion.tool_calls[0].arguments == {"a": 1}  # stitched back into valid JSON
+
+
+def test_openai_provider_stream_wraps_api_errors() -> None:
+    def boom(**_kwargs: Any) -> Any:
+        raise OpenAIError("upstream is down")
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=boom)))
+    provider = OpenAIProvider(api_key="unused", model="m", client=client)
+    with pytest.raises(TutorError):
+        _drain(provider.stream(system="s", messages=[UserMessage("hi")], tools=[]))
 
 
 # --- Live check against the real model (opt-in) ---------------------------------------------
