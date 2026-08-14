@@ -447,6 +447,58 @@ export const askTutor = (messages: TutorMessage[], token: Token) =>
     body: JSON.stringify({ messages }),
   });
 
+// Stream the tutor's reply token by token, calling `onDelta` for each chunk as it arrives.
+// Same account-scoped tools and "numbers from code" guard as askTutor; only the delivery differs.
+// The server sends SSE events, each a JSON object: {delta}, {error}, or {done}. Throws an
+// ApiError if the request fails to start or an error event arrives mid-stream.
+export async function streamTutor(
+  messages: TutorMessage[],
+  token: Token,
+  onDelta: (text: string) => void,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tutor/stream`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ messages }),
+  });
+
+  if (!res.ok || !res.body) {
+    if (res.status === 401) throw new ApiError("Your session ran out. Sign in again.", 401);
+    let message = `Something went wrong (${res.status}).`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") message = body.detail;
+    } catch {
+      // no JSON body; keep the status-based message
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE events are separated by a blank line; each carries one `data:` JSON payload.
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      const raw = buffer.slice(0, sep).trim();
+      buffer = buffer.slice(sep + 2);
+      if (!raw.startsWith("data:")) continue;
+      const event = JSON.parse(raw.slice(5).trim());
+      if (typeof event.error === "string") throw new ApiError(event.error, 502);
+      if (typeof event.delta === "string") onDelta(event.delta);
+      // {done: true} just ends the stream; the loop exits when the body closes.
+    }
+  }
+}
+
 // A stock the user is tracking without owning. Price fields are null when the live quote
 // is unavailable, the same way a holding degrades, so one flaky quote never hides the list.
 export type WatchlistItem = {

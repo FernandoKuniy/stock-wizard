@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { askTutor, type TutorMessage } from "@/lib/api";
+import { askTutor, streamTutor, type TutorMessage } from "@/lib/api";
 import { getAccessToken } from "@/lib/supabase/client";
 import { Markdown } from "./Markdown";
+
+const FALLBACK = "I couldn't put an answer together just now. Try asking again.";
 
 // A few openers so a first-time user knows the kind of thing to ask.
 const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the market?"];
@@ -43,15 +45,47 @@ export function Tutor() {
     setInput("");
     setError(null);
     setBusy(true);
+
+    // Show an assistant bubble straight away and fill it as tokens stream in. It renders only
+    // once it has content (see the render below), so the "Thinking…" line covers the wait.
+    let answer = "";
+    const show = (content: string) => setMessages([...next, { role: "assistant", content }]);
+    show("");
+
     try {
-      const { reply } = await askTutor(next, await getAccessToken());
-      setMessages([...next, { role: "assistant", content: reply }]);
+      await streamTutor(next, await getAccessToken(), (delta) => {
+        answer += delta;
+        show(answer);
+      });
+      if (answer === "") show(FALLBACK); // the model returned nothing
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The tutor couldn't answer just now.");
+      if (answer !== "") {
+        // Some of the reply had already arrived; keep it and note it stopped short.
+        setError("The tutor stopped partway. Try asking again.");
+        return;
+      }
+      // Nothing streamed: fall back to the non-streaming endpoint before giving up.
+      try {
+        const { reply } = await askTutor(next, await getAccessToken());
+        show(reply);
+      } catch (fallbackError) {
+        setMessages(next); // drop the empty bubble
+        setError(
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : e instanceof Error
+              ? e.message
+              : "The tutor couldn't answer just now.",
+        );
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  // Show "Thinking…" only until the first token lands, not through the whole stream.
+  const last = messages[messages.length - 1];
+  const waiting = busy && (last?.role !== "assistant" || last.content === "");
 
   return (
     <div className="flex h-full flex-col">
@@ -91,7 +125,7 @@ export function Tutor() {
                     {message.content}
                   </span>
                 </div>
-              ) : (
+              ) : message.content === "" ? null : ( // an assistant bubble waiting for its first token
                 <div key={index} className="text-left">
                   <div className="inline-block max-w-[85%] rounded-2xl bg-zinc-100 px-3 py-2 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
                     <Markdown>{message.content}</Markdown>
@@ -102,7 +136,7 @@ export function Tutor() {
           </div>
         )}
 
-        {busy && <p className="text-xs text-zinc-400">Thinking…</p>}
+        {waiting && <p className="text-xs text-zinc-400">Thinking…</p>}
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div ref={endRef} />
       </div>
