@@ -10,7 +10,7 @@ chat completions with tool calling.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -88,6 +88,22 @@ class TutorProvider:
     ) -> Completion:  # pragma: no cover - interface only
         raise NotImplementedError
 
+    def stream(
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema]
+    ) -> Generator[str, None, Completion]:
+        """Run one round, yielding text as it arrives; the return value is the full completion.
+
+        The default just delegates to ``complete`` and yields the answer in one piece, so any
+        provider streams *something* without extra work. A provider that can truly stream (the
+        OpenAI one below) overrides this to yield token by token. A round that only calls tools
+        yields nothing, since its content is empty; the engine relies on that to avoid leaking a
+        tool round's text to the user.
+        """
+        completion = self.complete(system=system, messages=messages, tools=tools)
+        if completion.text:
+            yield completion.text
+        return completion
+
 
 class OpenAIProvider(TutorProvider):
     """Runs the tutor on OpenAI's chat completions, translating to and from the neutral types."""
@@ -142,6 +158,57 @@ class OpenAIProvider(TutorProvider):
         )
         return Completion(text=message.content or "", tool_calls=calls)
 
+    def stream(
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema]
+    ) -> Generator[str, None, Completion]:
+        """Stream one round from OpenAI, yielding each content delta as it arrives.
+
+        Tool calls stream as fragments across many chunks, so we stitch them back together by
+        index and only surface them at the end, as the completed Completion. Content chunks are
+        yielded live; a tool round carries no content, so nothing is yielded for one.
+        """
+        payload = [{"role": "system", "content": system}, *(_to_openai(m) for m in messages)]
+        kwargs: dict[str, Any] = {"model": self._model, "messages": payload, "stream": True}
+        tool_specs = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                },
+            }
+            for tool in tools
+        ]
+        if tool_specs:
+            kwargs["tools"] = tool_specs
+            kwargs["tool_choice"] = "auto"
+
+        text_parts: list[str] = []
+        fragments: dict[int, dict[str, str]] = {}
+        try:
+            for chunk in self._client.chat.completions.create(**kwargs):
+                delta = chunk.choices[0].delta
+                if getattr(delta, "content", None):
+                    text_parts.append(delta.content)
+                    yield delta.content
+                for call in getattr(delta, "tool_calls", None) or []:
+                    _accumulate_tool_call(fragments, call)
+        except OpenAIError as exc:
+            raise TutorError(
+                "The tutor is having trouble reaching its brain right now. Try again in a moment."
+            ) from exc
+
+        calls = tuple(
+            ToolCall(
+                id=fragment["id"],
+                name=fragment["name"],
+                arguments=_parse_args(fragment["arguments"]),
+            )
+            for _, fragment in sorted(fragments.items())
+        )
+        return Completion(text="".join(text_parts), tool_calls=calls)
+
 
 @lru_cache
 def get_tutor_provider() -> TutorProvider | None:
@@ -178,3 +245,20 @@ def _parse_args(raw: str | None) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _accumulate_tool_call(fragments: dict[int, dict[str, str]], call: Any) -> None:
+    """Stitch a streamed tool-call fragment onto the one being built at its index.
+
+    OpenAI streams a tool call in pieces: the id and name arrive early, the JSON arguments dribble
+    in across later chunks. We key by ``call.index`` and concatenate the arguments as they come.
+    """
+    fragment = fragments.setdefault(call.index, {"id": "", "name": "", "arguments": ""})
+    if getattr(call, "id", None):
+        fragment["id"] = call.id
+    function = getattr(call, "function", None)
+    if function is not None:
+        if getattr(function, "name", None):
+            fragment["name"] = function.name
+        if getattr(function, "arguments", None):
+            fragment["arguments"] += function.arguments
