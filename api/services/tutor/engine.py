@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -75,6 +75,41 @@ def run_tutor(
     return _answer(final.text, tool_outputs)
 
 
+def stream_tutor(
+    provider: TutorProvider, tools: Sequence[Tool], conversation: Sequence[Turn]
+) -> Iterator[str]:
+    """Answer the latest turn like ``run_tutor``, but yield the reply's text as it streams.
+
+    Same loop: the model may call the (account-scoped) tools, whose results are fed back until it
+    answers in prose. Each round is streamed, so the final prose reaches the caller token by
+    token. A tool round yields nothing (its content is empty), so only the answer is forwarded.
+    The provenance guard runs once on the assembled text, after the stream ends; it only ever
+    logged, so streaming the words before the check is no weaker than before.
+    """
+    by_name = {tool.schema.name: tool for tool in tools}
+    schemas = [tool.schema for tool in tools]
+    messages: list[Message] = [_seed(turn) for turn in conversation]
+    tool_outputs: list[Any] = []
+
+    for _ in range(MAX_ROUNDS):
+        completion = yield from provider.stream(
+            system=SYSTEM_PROMPT, messages=messages, tools=schemas
+        )
+        if not completion.tool_calls:
+            _flag_stray_numbers(completion.text, tool_outputs)
+            return
+        messages.append(AssistantMessage(content=completion.text, tool_calls=completion.tool_calls))
+        for call in completion.tool_calls:
+            tool = by_name.get(call.name)
+            result = tool.run(call.arguments) if tool else {"error": f"Unknown tool {call.name}."}
+            tool_outputs.append(result)
+            messages.append(ToolMessage(tool_call_id=call.id, content=json.dumps(result)))
+
+    # Out of rounds: one more streamed round with no tools, so the model has to answer.
+    completion = yield from provider.stream(system=SYSTEM_PROMPT, messages=messages, tools=[])
+    _flag_stray_numbers(completion.text, tool_outputs)
+
+
 def _seed(turn: Turn) -> Message:
     if turn.role == "assistant":
         return AssistantMessage(content=turn.content)
@@ -82,9 +117,14 @@ def _seed(turn: Turn) -> Message:
 
 
 def _answer(text: str, tool_outputs: Sequence[Any]) -> TutorAnswer:
+    _flag_stray_numbers(text, tool_outputs)
+    return TutorAnswer(reply=text or _FALLBACK)
+
+
+def _flag_stray_numbers(text: str, tool_outputs: Sequence[Any]) -> None:
+    """Log any figure in the reply that no tool returned. A monitor, not a censor: the tools plus
+    the system prompt are the enforcement, and mangling a false positive is worse than a rare stray
+    digit, so we watch it rather than rewrite it (the same call the non-streaming path makes)."""
     stray = unaccounted_numbers(text, tool_outputs)
     if stray:
-        # A monitor, not a censor: log the provenance miss but don't mangle the wording. The
-        # tools plus the system prompt are the enforcement; this is how we watch it hold.
         logger.warning("Tutor answer stated numbers not traced to a tool: %s", stray)
-    return TutorAnswer(reply=text or _FALLBACK)
