@@ -6,6 +6,18 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-14  **The tutor streams by streaming every round and forwarding only content, with the
+  provenance guard run after.** Tools resolve as before, but each round of the loop is a streaming
+  call rather than a single `complete`. A round that calls tools carries no user-facing content, so
+  `yield from` forwards nothing for it; the answer round streams its text to the client token by
+  token. This avoids a wasted extra generation (the alternative, "resolve tools non-streamed, then
+  re-generate the answer as a stream", pays for the answer twice). The hard-rule-#1 guard still runs
+  on the fully assembled text once the stream ends: it was always a monitor that logs, never a
+  censor that rewrites, so streaming the words before the check is no weaker than before. The
+  non-streaming `POST /api/tutor` and `run_tutor` are **kept** as a fallback and for tests, and the
+  UI falls back to them if the stream can't start. SSE (`text/event-stream`) was chosen over
+  websockets: it's one-way server-to-client, works over plain HTTP through the existing CORS setup,
+  and needs no new infrastructure, which fits a demo with no background job.
 - 2026-08-13  **Recurring investing settles lazily and fires one run per dashboard load, then
   realigns to the future.** Like the limit-order and dividend sweeps, there's no background job:
   when the user loads their dashboard, due schedules fire. But rather than catching up every run

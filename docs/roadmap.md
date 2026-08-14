@@ -233,8 +233,17 @@ total gain into where it came from, so they can tell the difference.
 
 ## M10. Tutor streaming
 
-- [ ] Stream the tutor's final answer token by token (tools still resolve server-side first). The
-      provenance guard runs on the assembled text. Keep the non-streaming path as a fallback.
+The tutor replies token by token instead of after a pause. Same tools, same account scoping, same
+"numbers from code" guard; only the delivery changes.
+
+- [x] A `stream` method on the provider interface (default falls back to `complete`; the OpenAI
+      one stitches streamed tool-call fragments and yields content deltas live). The model stays
+      swappable; OpenAI specifics stay in `provider.py`.
+- [x] `stream_tutor` runs the same tool loop, streaming each round: a tool round yields nothing,
+      the answer round streams to the caller. The provenance guard runs on the assembled text.
+- [x] `POST /api/tutor/stream` serves it over SSE; the non-streaming `POST /api/tutor` stays as a
+      fallback and for tests. The chat UI fills the reply bubble as tokens arrive and falls back
+      to the non-streaming call if the stream can't start.
 
 ## M11. Proactive tutor explanations
 
@@ -254,6 +263,19 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-14  **M10 (tutor streaming) complete.** The tutor now replies token by token instead of
+  after a pause, with the same tools, account scoping, and "numbers from code" guard. A new
+  `stream` method on the provider interface streams one round: the OpenAI implementation yields
+  content deltas as they arrive and stitches the streamed tool-call fragments back together, while
+  the base default just delegates to `complete` so any provider streams something. `stream_tutor`
+  runs the same tool loop as `run_tutor` but `yield from`s each round; a **tool round yields
+  nothing** (its content is empty), so only the final answer reaches the client, and the provenance
+  guard runs once on the assembled text (it only ever logged, so streaming the words first is no
+  weaker). `POST /api/tutor/stream` serves it over SSE (`{delta}` / `{error}` / `{done}` events);
+  the non-streaming `POST /api/tutor` **stays as a fallback and for tests**. The chat UI fills the
+  reply bubble as tokens land and falls back to the non-streaming call if the stream can't start.
+  395 backend tests green (9 new: the streamed provider translation, the streaming engine loop, and
+  the SSE route); ruff + mypy clean; web passes eslint + prettier + tsc + a production build.
 - 2026-08-13  **M9 (realized vs unrealized) complete.** Splits the account's total gain into where
   it came from, so a beginner can tell money they've banked from a gain that's only on paper. New
   pure `services/analysis/realized.py` replays the ledger with the **same average-cost method the

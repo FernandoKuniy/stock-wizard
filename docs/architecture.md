@@ -428,6 +428,17 @@ the model can ask for figures but can never compute them itself. Built in M3.
   table, matching the stateless completion API). The panel is mounted in the root layout, which
   persists across navigation, so the thread survives moving between pages and is lost only on a
   full reload, which is the same ephemerality as before.
+- **Streaming (M10)**: the reply arrives token by token. The provider grows a `stream` method
+  alongside `complete` (default: delegate to `complete` and yield the answer whole; OpenAI:
+  yield content deltas live and stitch the streamed tool-call fragments back together). The
+  engine's `stream_tutor` runs the same tool loop as `run_tutor` but `yield from`s each round;
+  a tool round yields no content (its text is empty), so only the final answer streams to the
+  client, and the provenance guard runs once on the assembled text. `POST /api/tutor/stream`
+  serves it over Server-Sent Events (`{delta}` / `{error}` / `{done}` JSON payloads); the
+  non-streaming `POST /api/tutor` stays as a fallback and for the tests. The chat UI fills the
+  reply bubble as tokens land, showing "Thinking…" only until the first one, and falls back to
+  the non-streaming call if the stream can't start. See decisions.md (2026-08-14) for why every
+  round is streamed (rather than re-generating the answer) and why SSE over websockets.
 
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the
