@@ -219,6 +219,35 @@ def build_tools(
             "difference": _money(comparison.difference),
         }
 
+    def get_never_sold(_args: dict[str, Any]) -> dict[str, Any]:
+        rows = account_transactions()
+        try:
+            history = build_history(
+                rows,
+                candles,
+                opened_on=account.created_at.date(),
+                starting_balance=account.starting_balance,
+                benchmark_symbol=benchmark_symbol,
+            )
+        except MissingHistory:
+            return {"error": "I couldn't load the price history to work that out."}
+        if not history.never_sold or not history.portfolio:
+            return {
+                "available": False,
+                "message": (
+                    "There's no 'never sold' comparison yet: it exists only once something has "
+                    "been sold, and only when the buys could have been afforded without a sale."
+                ),
+            }
+        actual = history.portfolio[-1].value
+        held = history.never_sold[-1].value
+        return {
+            "your_value_now": _money(actual),
+            "value_if_never_sold": _money(held),
+            # Positive means the selling has worked out so far, in dollars.
+            "difference": _money(actual - held),
+        }
+
     def get_recent_news(args: dict[str, Any]) -> dict[str, Any]:
         symbol = _symbol(args)
         if not symbol:
@@ -324,6 +353,19 @@ def build_tools(
                 parameters=_NO_ARGS,
             ),
             run=get_benchmark_comparison,
+        ),
+        Tool(
+            schema=ToolSchema(
+                name="get_never_sold",
+                description=(
+                    "What the account would be worth now if every buy had simply been held and "
+                    "nothing sold, next to what it's actually worth, and the dollar difference. "
+                    "Call this when the user asks how their selling has worked out or what 'if I'd "
+                    "never sold' means for them. It's a fact about their own history, not advice."
+                ),
+                parameters=_NO_ARGS,
+            ),
+            run=get_never_sold,
         ),
         Tool(
             schema=ToolSchema(
