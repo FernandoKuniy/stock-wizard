@@ -221,6 +221,35 @@ def test_benchmark_comparison_matches_the_history_math(db_session: Session) -> N
     assert result["difference"] == -10000.0
 
 
+def test_never_sold_tool_reports_the_comparison(db_session: Session) -> None:
+    market, candles = FakeMarket(), FakeCandles()
+    account = _account(db_session, "alex@example.com")  # opened on the first chart day
+    bought = buy(db_session, account, "AAPL", quantity=Decimal(10), market=market)
+    bought.timestamp = datetime.combine(CHART_DAYS[0], time.min)
+    db_session.flush()
+    market._prices["AAPL"] = 200.0  # the price rose before the sell
+    sold = sell(db_session, account, "AAPL", quantity=Decimal(5), market=market)
+    sold.timestamp = datetime.combine(CHART_DAYS[1], time.min)
+    db_session.flush()
+
+    result = _tool(db_session, account, market, candles, "get_never_sold").run({})
+
+    # Valued at the candle closes (last close 150), not the live quote. Never selling leaves all
+    # ten held (100,000); actually selling five at 200 banked more, so the account is ahead.
+    assert result["value_if_never_sold"] == 100000.0
+    assert result["your_value_now"] == 100250.0
+    assert result["difference"] == 250.0  # selling has worked out so far
+
+
+def test_never_sold_tool_declines_when_nothing_was_sold(db_session: Session) -> None:
+    market, candles = FakeMarket(), FakeCandles()
+    account = _account_holding_aapl(db_session, market)  # a buy, never a sell
+
+    result = _tool(db_session, account, market, candles, "get_never_sold").run({})
+
+    assert result["available"] is False
+
+
 def test_recent_news_returns_headlines(db_session: Session) -> None:
     market, candles = FakeMarket(), FakeCandles()
     account = _account(db_session, "alex@example.com")
