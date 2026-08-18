@@ -1,3 +1,4 @@
+import { ExplainButton } from "@/components/ExplainButton";
 import { Term } from "@/components/Term";
 import type { Portfolio } from "@/lib/api";
 import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/format";
@@ -35,7 +36,12 @@ export function PortfolioSummary({ portfolio }: { portfolio: Portfolio }) {
       {/* The whole line blurs together: it arrives from the backend as one composed sentence,
           so there's no figure inside it to wrap on its own. */}
       {portfolio.what_moved && (
-        <p className="calm mt-1 text-sm text-zinc-500">{portfolio.what_moved}</p>
+        <div className="mt-1">
+          <p className="calm text-sm text-zinc-500">{portfolio.what_moved}</p>
+          <div className="mt-1">
+            <ExplainButton prompt="Which of my holdings has moved my total the most, and how?" />
+          </div>
+        </div>
       )}
       <div className="mt-4 grid grid-cols-2 gap-4 border-t border-zinc-100 pt-4 text-sm dark:border-zinc-800">
         <div>

@@ -1,5 +1,6 @@
 import type { NeverSold } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { ExplainButton } from "./ExplainButton";
 
 /**
  * "What if you'd never sold?" replayed from the account's own buys at today's prices.
@@ -42,6 +43,13 @@ export function NeverSoldNote({ never_sold, actual }: { never_sold: NeverSold; a
         This just replays your own buys at today&apos;s prices. It doesn&apos;t mean selling was the
         wrong call, and it says nothing about what happens next.
       </p>
+      <div className="mt-2">
+        <ExplainButton
+          prompt={
+            'What does "what if I\'d never sold" say about my account, and how has selling worked out?'
+          }
+        />
+      </div>
     </div>
   );
 }

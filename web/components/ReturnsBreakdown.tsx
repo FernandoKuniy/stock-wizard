@@ -1,5 +1,6 @@
 import type { Portfolio } from "@/lib/api";
 import { formatSignedMoney } from "@/lib/format";
+import { ExplainButton } from "./ExplainButton";
 import { Term } from "./Term";
 
 /**
@@ -26,6 +27,9 @@ export function ReturnsBreakdown({ portfolio }: { portfolio: Portfolio }) {
           note="still riding on what you hold"
         />
         <Row label="Dividends" amount={dividend_income} note="paid to you just for holding" />
+      </div>
+      <div className="mt-3">
+        <ExplainButton prompt="How does my total gain break down into what I've locked in, what's still on paper, and dividends?" />
       </div>
     </div>
   );

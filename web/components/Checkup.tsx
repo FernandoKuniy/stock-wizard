@@ -1,4 +1,5 @@
 import type { CheckupFinding, CheckupStatus } from "@/lib/api";
+import { ExplainButton } from "./ExplainButton";
 
 /**
  * The portfolio check-up: a few plain-English observations about how your money is spread.
@@ -42,9 +43,15 @@ export function Checkup({ findings }: { findings: CheckupFinding[] }) {
                   ⌄
                 </span>
               </summary>
-              <p className="px-4 pb-3 pl-13 text-sm text-zinc-600 dark:text-zinc-300">
-                {finding.lesson}
-              </p>
+              <div className="px-4 pb-3 pl-13">
+                <p className="text-sm text-zinc-600 dark:text-zinc-300">{finding.lesson}</p>
+                <div className="mt-2">
+                  <ExplainButton
+                    prompt={`Explain this observation about my portfolio and why it matters: "${finding.title}"`}
+                    label="Ask the tutor about mine"
+                  />
+                </div>
+              </div>
             </details>
           </li>
         ))}
