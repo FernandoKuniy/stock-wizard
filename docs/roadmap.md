@@ -134,44 +134,50 @@ Safety and cost:
 
 - [ ] Set a hard OpenAI spend cap at the billing level (dashboard, manual), so a runaway can't
       run up an unbounded bill.
-- [ ] A light per-account throttle on the tutor endpoint, so one account (or a leaked invite
+- [x] A light per-account throttle on the tutor endpoint, so one account (or a leaked invite
       code) can't loop the tutor and drive up the OpenAI bill.
 
 The demo experience:
 
-- [ ] Auto-seed every new account with the backdated six-month sample portfolio (`seed --history`
+- [x] Auto-seed every new account with the backdated six-month sample portfolio (`seed --history`
       logic wired into account creation), so the benchmark line, what-if, check-up and never-sold
       all teach from the first screen. Carry a clear "this is a sample, hit reset to start your
       own" banner; reset reveals the empty-state "start here" onboarding from M5. Watch Twelve
       Data quota: seeding buys five symbols at historical closes.
-- [ ] Error boundaries: `error.tsx`, `not-found.tsx`, `loading.tsx` in the app's calm tone, so a
+- [x] Error boundaries: `error.tsx`, `not-found.tsx`, `loading.tsx` in the app's calm tone, so a
       prod hiccup never shows Next's default crash screen.
-- [ ] A "simulation, not advice" line in the footer on every page.
+- [x] A "simulation, not advice" line in the footer on every page.
 
 Repo polish (the code is the deliverable):
 
-- [ ] Split `main.py` (about 30KB, 20 routes) into `APIRouter`s by domain (stock, portfolio,
+- [x] Split `main.py` (about 30KB, 20 routes) into `APIRouter`s by domain (stock, portfolio,
       orders, watchlist, tutor, account). Pure refactor, no behaviour change, covered by the
       existing tests.
-- [ ] README as a landing page: the live URL and how to get in, screenshots or a short GIF, the
+- [x] README as a landing page: the live URL and how to get in, screenshots or a short GIF, the
       architecture summary, a "Known limitations" section, and a "Security" note pointing at the
       decision log.
-- [ ] A LICENSE file.
-- [ ] Write "Known limitations" honestly rather than building around it: no stock-split or
+- [x] A LICENSE file.
+- [x] Write "Known limitations" honestly rather than building around it: no stock-split or
       dividend handling, market orders fill at the last close outside market hours, limit orders
       sweep on page load. Deliberate scope calls, and saying so shows judgement.
 
 Deploy (Vercel for `web/`, Render for `api/`):
 
-- [ ] Set every env var in both hosts, including `SIGNUP_CODE` on Render and the Twelve Data key
+The app is **deployed**: Vercel for `web/`, Render for `api/`. The Render blueprint
+(`render.yaml`, migrations run on start via the start command), multi-origin CORS through
+`FRONTEND_ORIGIN`, and the keep-warm workflow carried it. The one box still open, the manual
+OpenAI spend cap above, is *not* part of the Vercel/Render deploy: it's an OpenAI-dashboard
+action, and it's the last cost-safety step worth doing now the app is publicly reachable.
+
+- [x] Set every env var in both hosts, including `SIGNUP_CODE` on Render and the Twelve Data key
       (the auto-seed needs it).
-- [ ] Point Supabase Auth's Site URL and redirect URLs at the deployed domain, or confirmation
+- [x] Point Supabase Auth's Site URL and redirect URLs at the deployed domain, or confirmation
       and reset emails link to localhost.
-- [ ] Allow the deployed Vercel origin through CORS (a single localhost origin today).
-- [ ] Run `alembic upgrade head` as a Render pre-deploy step.
-- [ ] Keep-warm: a scheduled ping so the free Supabase project doesn't pause after 7 days idle
+- [x] Allow the deployed Vercel origin through CORS (a single localhost origin today).
+- [x] Run `alembic upgrade head` as a Render pre-deploy step.
+- [x] Keep-warm: a scheduled ping so the free Supabase project doesn't pause after 7 days idle
       and the api isn't cold on every visit.
-- [ ] Smoke-test a real invite signup on the deployed environment end to end.
+- [x] Smoke-test a real invite signup on the deployed environment end to end.
 
 Explicit non-goals for this milestone (a portfolio demo, not a public product):
 
@@ -280,6 +286,19 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-18  **Deployed.** The web is live on Vercel and the api on Render; the blueprint,
+  multi-origin CORS, migrate-on-start, and the keep-warm workflow all carried it. M6's deploy
+  boxes are ticked. The one remaining M6 item is the **manual OpenAI spend cap** (an
+  OpenAI-dashboard action, separate from the Vercel/Render deploy). The README's live-URL and
+  screenshot placeholders can now be filled in.
+- 2026-08-18  **Swept the stale M6 checkboxes against reality.** Every code/config item was
+  already done and just unticked: the tutor throttle, auto-seeding new accounts, the error
+  boundaries, the footer disclaimer, the `main.py` router split, the landing-page README, the
+  LICENSE, the honest "Known limitations", the migration-on-start command, and the keep-warm
+  workflow. The only open M6 items now are the **manual deploy** itself (provision Vercel +
+  Render, set the secrets, point Supabase Auth at the live domain, smoke-test a real invite
+  signup) and the **manual OpenAI billing cap** — all operator actions, nothing blocking in the
+  code. The README's live-URL and screenshot placeholders fill in once that deploy happens.
 - 2026-08-15  **M12 (frontend tests) complete, closing out the M7-M12 arc.** The frontend went from
   zero tests to a Vitest + Testing Library suite (21 tests across 7 files) over `lib/format`,
   `lib/glossary`, and the presentational components (PortfolioSummary, ReturnsBreakdown, Checkup,
