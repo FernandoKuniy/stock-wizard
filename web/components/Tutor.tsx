@@ -18,13 +18,15 @@ const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the m
  *
  * Fills its container rather than sizing itself, because the panel owns the height.
  */
-export function Tutor() {
+export function Tutor({ pending }: { pending?: { text: string; key: number } | null }) {
   const [messages, setMessages] = useState<TutorMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const sendRef = useRef<(text: string) => void>(() => {});
+  const handledKey = useRef<number | null>(null);
 
   // In a fixed-height panel a new answer lands below the fold, so follow it down.
   useEffect(() => {
@@ -82,6 +84,20 @@ export function Tutor() {
       setBusy(false);
     }
   }
+
+  // Keep a live pointer to the latest send, so the auto-send effect needn't depend on it.
+  useEffect(() => {
+    sendRef.current = send;
+  });
+
+  // An "explain this" button elsewhere can hand us a question. Send it once (keyed so
+  // React's dev double-run doesn't fire it twice), after any in-flight answer finishes.
+  useEffect(() => {
+    if (pending && pending.key !== handledKey.current && !busy) {
+      handledKey.current = pending.key;
+      void sendRef.current(pending.text);
+    }
+  }, [pending, busy]);
 
   // Show "Thinking…" only until the first token lands, not through the whole stream.
   const last = messages[messages.length - 1];

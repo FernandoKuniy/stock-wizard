@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { onAskTutor } from "@/lib/tutor-bus";
 import { Tutor } from "./Tutor";
 
 /**
@@ -16,6 +17,10 @@ import { Tutor } from "./Tutor";
 export function TutorPanel() {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // A question handed to us by an "explain this" button, keyed so the same finding can be
+  // asked again and React's dev double-run doesn't send it twice.
+  const [pending, setPending] = useState<{ text: string; key: number } | null>(null);
+  const askKey = useRef(0);
 
   // Closing puts focus back where it came from. Without this a keyboard user lands back at
   // the top of the document and has to tab through the whole header again.
@@ -23,6 +28,17 @@ export function TutorPanel() {
     setOpen(false);
     triggerRef.current?.focus();
   }, []);
+
+  // An "explain this" button anywhere opens the panel and hands the tutor a question.
+  useEffect(
+    () =>
+      onAskTutor((prompt) => {
+        setOpen(true);
+        askKey.current += 1;
+        setPending({ text: prompt, key: askKey.current });
+      }),
+    [],
+  );
 
   // Escape closes it, the way anything that covers the page should.
   useEffect(() => {
@@ -75,7 +91,7 @@ export function TutorPanel() {
               </button>
             </div>
             <div className="min-h-0 flex-1">
-              <Tutor />
+              <Tutor pending={pending} />
             </div>
             {/* The glossary lives behind the panel rather than in the nav: it's the same
                 "I don't know what that means" moment, and the nav stays at three places. */}
