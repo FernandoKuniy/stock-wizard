@@ -6,6 +6,19 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-15  **Frontend tests are a Vitest component/unit suite; the signed-in end-to-end
+  click-through stays a documented manual step.** The frontend gap was "no tests at all", and the
+  highest-value, immediately-runnable fix is Vitest + Testing Library over the pure helpers and the
+  presentational components (mocked props, jsdom). It runs in CI with no backend or secrets and it
+  caught a real bug on the first run (a trailing space in `formatSignedMoney`). A full Playwright
+  E2E that signs in and buys was considered and **deferred**: it needs a running api + web + a
+  dedicated test Supabase project (the app's auth wall verifies tokens against Supabase's JWKS, so
+  it can't be faked offline cleanly), which is more infrastructure than an invite-only portfolio
+  demo warrants in CI. The interactive components that need a router, Supabase, or a live fetch
+  (the order form, the tutor chat, the charts) are left out of the unit layer rather than mocked to
+  death. Tooling is pinned to Vitest 2 / Vite 5 / jsdom 25 to run cleanly on the repo's Node range
+  (Vite 7 / jsdom 30 need Node 20.19+ and hit ESM-`require` errors below that); JSX transforms via
+  esbuild, so no `@vitejs/plugin-react` is needed.
 - 2026-08-14  **"Explain this" seeds the tutor with a qualitative question, not the finding's
   text, so numbers stay code-sourced.** The explain-this buttons on the check-up, what-moved,
   never-sold and returns breakdown could have pasted the server-composed finding (figures and all)

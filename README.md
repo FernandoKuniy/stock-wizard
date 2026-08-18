@@ -189,6 +189,7 @@ Deliberate scope calls for a teaching demo, not oversights:
 ## Development
 
 - Backend tests: `cd api && uv run pytest`
+- Frontend tests: `cd web && pnpm test` (Vitest + Testing Library, no backend needed)
 - Lint/format (api): `uv run ruff check .` and `uv run ruff format .`
 - Lint/format (web): `pnpm lint` and `pnpm exec prettier --write .`
 - Type checks: `uv run mypy .` (api) and `pnpm exec tsc --noEmit` (web)

@@ -259,11 +259,20 @@ now carry an "explain this" that opens the tutor pre-loaded with a question abou
 - [x] Stays inside both hard rules: numbers come from tools (guard-clean), and it explains an
       existing observation, never volunteering a buy-or-sell opinion.
 
-## M12. Frontend and E2E tests
+## M12. Frontend tests
 
-- [ ] Vitest + Testing Library over `lib/` and the presentational components (runs in CI, no
-      backend). Plus a Playwright smoke (sign in, buy, see it on the overview) against a running
-      stack, gated on a test Supabase project, to close the "signed-in click-through" step for good.
+The frontend had 317+ backend tests behind it and none of its own. This adds a real suite, and it
+earned its keep immediately (it caught a live trailing-space bug in the money formatter).
+
+- [x] Vitest + Testing Library over `lib/` (the formatters and the glossary) and the presentational
+      components rendered in jsdom with mocked props. No backend, no network, no secrets, so it runs
+      in CI beside the linters. Wired into the frontend CI job as `pnpm test`.
+- [x] Tooling pinned to Vitest 2 / Vite 5 / jsdom 25 so it runs on the repo's Node range without
+      native-binding or ESM-require friction; JSX transforms via esbuild, no extra Vite plugin.
+- [ ] A full signed-in Playwright E2E (sign in -> buy -> see it) is **deferred**, not built: a real
+      smoke needs a running api + web + a dedicated test Supabase project, more infra than an
+      invite-only demo wants in CI. The click-through stays a documented manual step (see
+      architecture.md and decisions.md, 2026-08-15).
 
 Explicit non-goals across M7-M12 (same reasoning the earlier ones use): real-time websocket price
 ticking (contradicts calm mode), forward return projections (edge toward advice), and Redis or any
@@ -271,6 +280,20 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-15  **M12 (frontend tests) complete, closing out the M7-M12 arc.** The frontend went from
+  zero tests to a Vitest + Testing Library suite (21 tests across 7 files) over `lib/format`,
+  `lib/glossary`, and the presentational components (PortfolioSummary, ReturnsBreakdown, Checkup,
+  TransactionsTable, NeverSoldNote) rendered in jsdom with mocked props. It runs with no backend,
+  network, or secrets, and it's wired into the frontend CI job as `pnpm test`, beside the linters.
+  It **paid for itself on the first run**: it caught a live trailing-space bug in `formatSignedMoney`
+  (committed, not a stray edit) that would have doubled the space after every signed dollar amount,
+  which is now fixed. The tooling is pinned to **Vitest 2 / Vite 5 / jsdom 25** so it runs on the
+  repo's Node range without the native-binding and ESM-`require` friction the latest versions hit on
+  Node 20; JSX transforms through esbuild with no extra Vite plugin. A **full signed-in Playwright
+  E2E was deliberately deferred** (see decisions.md): a real smoke needs a running api + web + a
+  dedicated test Supabase project, which is more than an invite-only demo wants standing up in CI,
+  so the signed-in click-through stays a documented manual step. web passes eslint + prettier + tsc
+  + `pnpm test` + a production build; the backend suite (397) is untouched and still green.
 - 2026-08-14  **M11 (proactive tutor explanations) complete.** The deterministic reads now carry an
   "explain this to me" that opens the docked tutor pre-loaded with a question about the user's own
   money: on the check-up findings, the "what moved your money" line, the never-sold note, and the

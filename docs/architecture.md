@@ -741,3 +741,14 @@ check-up holds: it explains what you've banked versus what's on paper, and never
 - Unit test the sim and analysis layers hard. They are pure functions and they are where
   correctness matters most (real balances, real math).
 - Mock the market client in tests so tests do not hit Finnhub or burn quota.
+- Frontend: Vitest + Testing Library over `lib/` (the formatters and the glossary) and the
+  presentational components rendered in jsdom with mocked props. No backend, no network, no
+  secrets, so it runs in CI beside the linters. It exists to catch exactly the kind of thing it
+  caught on day one: a stray trailing space in `formatSignedMoney` that would have doubled a
+  space after every signed dollar amount. Interactive components that need a router, Supabase, or
+  a live fetch (the order form, the tutor chat, the charts) are deliberately left out of this
+  layer rather than mocked to death.
+- The signed-in end-to-end click-through (sign in -> search -> buy -> see it on the overview)
+  stays a **documented manual step** for now. A real Playwright smoke needs a running api + web +
+  a dedicated test Supabase project, which is more infrastructure than an invite-only demo wants
+  to stand up in CI; it's the natural next step if the app ever grows past a demo.
