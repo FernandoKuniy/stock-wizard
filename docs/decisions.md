@@ -6,6 +6,19 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-14  **"Explain this" seeds the tutor with a qualitative question, not the finding's
+  text, so numbers stay code-sourced.** The explain-this buttons on the check-up, what-moved,
+  never-sold and returns breakdown could have pasted the server-composed finding (figures and all)
+  into the tutor. Instead they hand it a topic-level question that names no number ("how does my
+  gain break down…", "which holding moved my total the most…"), so the tutor fetches the real
+  figures from its account-scoped tools and the provenance guard stays clean, rather than the model
+  echoing text the client passed in. This keeps hard rule #1 intact and needed only one new tool,
+  `get_never_sold`; the others reuse `get_concentration`, `get_portfolio_summary`, and
+  `get_returns_breakdown`. The buttons reach the docked tutor through a small window-event bridge
+  (`lib/tutor-bus.ts`) rather than a React context, matching the app's other lightweight
+  external-store signals (the first-time callouts, calm mode) and avoiding a provider around the
+  tree. It stays inside hard rule #2 too: it explains an observation the code already made, never
+  volunteering a buy-or-sell opinion.
 - 2026-08-14  **The tutor streams by streaming every round and forwarding only content, with the
   provenance guard run after.** Tools resolve as before, but each round of the loop is a streaming
   call rather than a single `complete`. A round that calls tools carries no user-facing content, so

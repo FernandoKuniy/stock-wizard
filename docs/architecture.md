@@ -439,6 +439,15 @@ the model can ask for figures but can never compute them itself. Built in M3.
   reply bubble as tokens land, showing "Thinking…" only until the first one, and falls back to
   the non-streaming call if the stream can't start. See decisions.md (2026-08-14) for why every
   round is streamed (rather than re-generating the answer) and why SSE over websockets.
+- **Explain this (M11)**: the deterministic reads (the check-up, "what moved your money", the
+  never-sold note, the realized/unrealized breakdown) each carry an `ExplainButton`. It opens the
+  docked tutor pre-loaded with a question about the user's own money, through a small window-event
+  bridge (`lib/tutor-bus.ts`) rather than a React context, matching the app's other lightweight
+  external-store signals. The seeded questions are **qualitative on purpose** (they name the topic,
+  never a figure), so the tutor pulls the real numbers from its account-scoped tools and the
+  provenance guard stays clean, instead of the model echoing text the client passed in. Only one
+  new tool was needed, `get_never_sold`; the rest reuse `get_concentration`,
+  `get_portfolio_summary`, and `get_returns_breakdown`. See decisions.md (2026-08-14).
 
 The `open-paper-trading-mcp` repo is a working reference for the read-only-tools-over-a-
 portfolio pattern if you want to see one built out. FinRobot is the reference for the

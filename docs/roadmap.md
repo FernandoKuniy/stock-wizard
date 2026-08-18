@@ -247,9 +247,17 @@ The tutor replies token by token instead of after a pause. Same tools, same acco
 
 ## M11. Proactive tutor explanations
 
-- [ ] "Explain this" on the check-up findings, what-moved, never-sold and the realized breakdown.
-      The tutor fetches the authoritative finding by key (numbers from code), so it stays inside
-      hard rule #2: it explains an existing fact, never volunteers an opinion.
+Reads on the deterministic layer (the check-up, what-moved, never-sold, the realized breakdown)
+now carry an "explain this" that opens the tutor pre-loaded with a question about your own money.
+
+- [x] An `ExplainButton` on the check-up findings, the "what moved your money" line, the
+      never-sold note, and the returns breakdown. A tiny window-event bus opens the docked tutor
+      and hands it a question; the panel and chat auto-send it (keyed so it fires once).
+- [x] The seeded questions are **qualitative** (they name the topic, never a figure), so the
+      tutor pulls the real numbers from its account-scoped tools rather than echoing page text.
+      One new `get_never_sold` tool fills the only gap; the rest reuse existing tools.
+- [x] Stays inside both hard rules: numbers come from tools (guard-clean), and it explains an
+      existing observation, never volunteering a buy-or-sell opinion.
 
 ## M12. Frontend and E2E tests
 
@@ -263,6 +271,19 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-14  **M11 (proactive tutor explanations) complete.** The deterministic reads now carry an
+  "explain this to me" that opens the docked tutor pre-loaded with a question about the user's own
+  money: on the check-up findings, the "what moved your money" line, the never-sold note, and the
+  realized/unrealized breakdown. A tiny `lib/tutor-bus.ts` window-event bridge lets a button on any
+  page open the panel (which the header owns) and hand the chat a question; `TutorPanel` and `Tutor`
+  auto-send it, keyed so React's dev double-run can't fire it twice. The seeded questions are
+  **qualitative on purpose** (they name the topic, never a figure), so the tutor fetches the real
+  numbers from its account-scoped tools instead of echoing page text, which keeps the provenance
+  guard clean and hard rule #1 intact (see decisions.md). Only one new tool was needed,
+  `get_never_sold`; the check-up, what-moved and returns explanations reuse `get_concentration`,
+  `get_portfolio_summary`, and `get_returns_breakdown`. It stays inside hard rule #2, explaining an
+  existing observation and never volunteering a buy-or-sell opinion. 397 backend tests green (2 new
+  for the tool); ruff + mypy clean; web passes eslint + prettier + tsc + a production build.
 - 2026-08-14  **M10 (tutor streaming) complete.** The tutor now replies token by token instead of
   after a pause, with the same tools, account scoping, and "numbers from code" guard. A new
   `stream` method on the provider interface streams one round: the OpenAI implementation yields

@@ -101,6 +101,10 @@ Do NOT build a separate "Learn" tab that nobody visits. Weave teaching into the 
 - A one-line "why did this move?" on big price changes, pulled from news.
 - Short contextual explainers that appear the first time a user hits a new concept, then
   get out of the way.
+- An "explain this" on the reads that judge you (the check-up, what moved your money, the
+  never-sold note, the realized-vs-paper breakdown): one tap opens the tutor with a question
+  about your own numbers, so a deterministic observation can turn into a personalised
+  explanation on demand. The tutor pulls the figures from code and explains, never advises.
 - Plain-language money framing everywhere. "You made $240" beats "up 2.4%."
 - A first-run "start here" path on an account that owns nothing: look something up, buy a
   small piece, then leave it alone. The steps are about **how the app works**, never about
