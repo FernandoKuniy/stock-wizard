@@ -15,9 +15,19 @@ The frontend runs on Vercel, the api on Render (`stock-wizard-api.onrender.com`)
 the same Supabase project. A scheduled ping keeps the free tiers awake, so the link shouldn't cold
 start on you.
 
-Signup is **invite-only**, so a public link isn't open to every passer-by and bot spending the
-API bills. Want to try it? Reach out for a code. Running it locally skips the gate entirely (see
-[Running it locally](#running-it-locally)).
+**Go and have a play. The invite code is `ripozzy`.**
+
+Signup is invite-gated so a public link isn't open to every bot spending the API bills, but that
+code is for you: it opens a real, funded $100,000 account with six months of sample history
+already in it. Buy, sell, set limit orders, collect dividends, break it and hit reset. All of it
+is yours to poke at.
+
+The one thing it caps is the **AI tutor**, at a single question. Every answer is a real call to a
+language model and costs actual money, so one is what the open code comes with. If you want the
+tutor properly, [ask me for a code](https://fernando-kuniy.vercel.app/) and I'll send one that
+doesn't run out. The app tells you where to ask when you get there.
+
+Running it locally skips the gate entirely (see [Running it locally](#running-it-locally)).
 
 ## Screenshots
 
@@ -172,11 +182,18 @@ This is a simulation, but it holds real emails and per-user balances, so a few t
   Every route scopes its reads to the signed-in account, and a test proves one user's money never
   appears in another's. RLS is still enabled deny-by-default, and the Supabase **Data API is turned
   off**, so the tables aren't exposed even if someone has the browser's publishable key.
-- **Signup is invite-gated at the API.** A shared code is enforced where every route already funnels
-  through, not just on the form, so it can't be bypassed by calling Supabase's signup endpoint directly.
+- **Signup is invite-gated at the API.** The code is checked where every route already funnels
+  through, not just on the form, so it can't be bypassed by calling Supabase's signup endpoint
+  directly. There are two codes: the private one, and the demo code above, which differs only in
+  that its tutor is capped. Both are compared in constant time, and the API refuses to start if
+  they're ever configured to the same value.
 - **The tutor can't make up numbers.** A provenance guard checks that every figure in a tutor reply
   traces back to a tool that computed it, and the tutor is rate-limited per account so a leaked code
   can't run up the OpenAI bill.
+- **The demo tutor's cap is counted in Postgres, not in memory.** The in-process rate limiter is a
+  burst guard whose window resets whenever the instance restarts, which on a free tier is often, so
+  it could never hold a lifetime allowance. The spend itself is a conditional `UPDATE` whose row
+  count decides the race, so two calls arriving together can't both get through.
 
 The reasoning behind each of these is in [docs/decisions.md](docs/decisions.md).
 
