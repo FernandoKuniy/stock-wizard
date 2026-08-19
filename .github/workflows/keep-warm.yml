@@ -26,4 +26,7 @@ jobs:
             echo "API_HEALTH_URL is not set yet; nothing to ping. Set it after deploying."
             exit 0
           fi
-          curl -fsS --max-time 30 "$url" && echo " -- ok"
+          # A warm instance answers in under a second, but a cold one has to boot first and
+          # takes well over 30s. That's the exact case this job exists to fix, so the timeout
+          # has to outlast a cold start or the first ping after any gap fails on its own.
+          curl -fsS --max-time 120 --retry 2 --retry-all-errors --retry-delay 15 "$url" && echo " -- ok"
