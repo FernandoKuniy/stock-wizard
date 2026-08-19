@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.orm import Session
 
+from auth import get_current_user, get_demo_tutor_message_limit
 from config import get_settings
+from models import User
 from ratelimit import RateLimiter
 from routers.common import BENCHMARK_SYMBOL, AccountDep, CandleDep, MarketDep, SessionDep, TutorDep
 from schemas import TutorReplyOut, TutorRequest
@@ -48,10 +53,93 @@ def enforce_tutor_rate_limit(
         )
 
 
+# The machine-readable marker the frontend keys off to swap the tutor's composer for the
+# "ask me for a full code" banner. Travels in the error body's ``detail.code``, the same shape
+# the invite gate uses (see auth.py).
+DEMO_LIMIT_REACHED = "demo_limit_reached"
+
+
+def check_demo_tutor_allowance(
+    user: Annotated[User, Depends(get_current_user)],
+    limit: Annotated[int, Depends(get_demo_tutor_message_limit)],
+) -> None:
+    """Refuse a demo account's tutor call once it has spent its lifetime allowance.
+
+    A courtesy check, not the guard: it answers fast and with something the UI can act on,
+    but two calls racing each other could both pass it. ``_spend_tutor_message`` below is
+    what actually enforces the limit. Full-tier users are never counted or checked.
+    """
+    if not user.is_demo:
+        return
+    if user.tutor_messages_used >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": DEMO_LIMIT_REACHED,
+                "message": "That was the free question that comes with the demo code.",
+            },
+        )
+
+
+def _spend_tutor_message(session: Session, user: User, limit: int) -> None:
+    """Spend one of a demo account's tutor questions, or raise if there are none left.
+
+    The real guard. A single conditional UPDATE, so two requests arriving together can't both
+    read "0 used" and both call OpenAI: the database decides, and exactly one row updates.
+
+    Called as late as possible, immediately before the provider call, so a request that fails
+    earlier (no tutor configured, a malformed body) never costs anyone their question.
+    """
+    if not user.is_demo:
+        return
+    # Cast because Session.execute is typed as returning a plain Result, which has no
+    # rowcount; an UPDATE always yields a CursorResult, which does. rowcount is the whole
+    # point here: it tells us whether the WHERE matched, and so whether we won the race.
+    result = cast(
+        "CursorResult[Any]",
+        session.execute(
+            update(User)
+            .where(User.id == user.id, User.tutor_messages_used < limit)
+            .values(tutor_messages_used=User.tutor_messages_used + 1)
+        ),
+    )
+    spent = result.rowcount
+    session.commit()
+    if not spent:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": DEMO_LIMIT_REACHED,
+                "message": "That was the free question that comes with the demo code.",
+            },
+        )
+
+
+def _refund_tutor_message(session: Session, user: User) -> None:
+    """Give a demo user their question back when the call failed without answering.
+
+    Only reachable on the non-streaming route, where the failure still happens inside the
+    request. A stream that dies partway through has already left the request scope (and its
+    session) behind, so it keeps the charge; the error copy points at a way to ask for a full
+    code instead. Clamped at zero so a refund can never mint an extra question.
+    """
+    if not user.is_demo:
+        return
+    session.execute(
+        update(User)
+        .where(User.id == user.id, User.tutor_messages_used > 0)
+        .values(tutor_messages_used=User.tutor_messages_used - 1)
+    )
+    session.commit()
+
+
 router = APIRouter()
 
 
-@router.post("/api/tutor", dependencies=[Depends(enforce_tutor_rate_limit)])
+@router.post(
+    "/api/tutor",
+    dependencies=[Depends(enforce_tutor_rate_limit), Depends(check_demo_tutor_allowance)],
+)
 def ask_tutor(
     body: TutorRequest,
     account: AccountDep,
@@ -59,6 +147,8 @@ def ask_tutor(
     market: MarketDep,
     candles: CandleDep,
     provider: TutorDep,
+    user: Annotated[User, Depends(get_current_user)],
+    demo_limit: Annotated[int, Depends(get_demo_tutor_message_limit)],
 ) -> TutorReplyOut:
     """Ask the AI tutor about your own portfolio, getting the whole answer back at once.
 
@@ -70,14 +160,20 @@ def ask_tutor(
     ready = _require_ready(body, provider)
     conversation = _conversation(body)
     tools = build_tools(session, account, market, candles, benchmark_symbol=BENCHMARK_SYMBOL)
+    _spend_tutor_message(session, user, demo_limit)
     try:
         answer = run_tutor(ready, tools, conversation)
     except (MarketError, TutorError) as exc:
+        # The call cost nothing useful, so it shouldn't cost a demo user their question.
+        _refund_tutor_message(session, user)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return TutorReplyOut(reply=answer.reply)
 
 
-@router.post("/api/tutor/stream", dependencies=[Depends(enforce_tutor_rate_limit)])
+@router.post(
+    "/api/tutor/stream",
+    dependencies=[Depends(enforce_tutor_rate_limit), Depends(check_demo_tutor_allowance)],
+)
 def ask_tutor_stream(
     body: TutorRequest,
     account: AccountDep,
@@ -85,6 +181,8 @@ def ask_tutor_stream(
     market: MarketDep,
     candles: CandleDep,
     provider: TutorDep,
+    user: Annotated[User, Depends(get_current_user)],
+    demo_limit: Annotated[int, Depends(get_demo_tutor_message_limit)],
 ) -> StreamingResponse:
     """Ask the AI tutor and get the reply streamed back token by token over SSE.
 
@@ -96,6 +194,10 @@ def ask_tutor_stream(
     ready = _require_ready(body, provider)
     conversation = _conversation(body)
     tools = build_tools(session, account, market, candles, benchmark_symbol=BENCHMARK_SYMBOL)
+    # Spent here rather than inside the generator: by the time that runs the request is over
+    # and its session is gone. Charging up front also means a client that hangs up mid-answer
+    # still pays for the call we already made.
+    _spend_tutor_message(session, user, demo_limit)
 
     def events() -> Iterator[str]:
         try:
