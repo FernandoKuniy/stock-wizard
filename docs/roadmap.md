@@ -285,6 +285,20 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-19  **Portfolio polish: brand assets, social card, and the README screenshots.** A real
+  favicon, iOS icon, and 1200x630 preview card, all drawn from one SVG mark in `lib/brand.ts` and
+  rasterised by `next/og` at build time, plus `metadataBase`/`openGraph`/`twitter` so a pasted link
+  stops unfurling as a grey box. Two live bugs fell out of building it. The auth proxy's matcher
+  was redirecting `/icon`, `/apple-icon`, and `/opengraph-image` to `/login`, so the card would
+  never have loaded for a crawler (every request for those is signed out, by definition). And the
+  first screenshot caught **"$100,000.00of fake cash"**: a JSX text node that both starts with a
+  space and contains an entity loses that leading space through SWC, which hit four spots. `{" "}`
+  is not a fix, because Prettier rewrites it back to a plain space, so the copy after the amount
+  now lives in a string expression. Note that Vitest transforms with esbuild, not SWC, so **no unit
+  test can catch this class of bug**; the guard is a comment at each site. Also: body was rendering
+  in Arial while both Geist faces downloaded unused, so Geist Sans is now applied and Geist Mono
+  dropped entirely. Four screenshots (overview, tutor, stock, activity) captured from the live
+  site into `docs/screenshots/`.
 - 2026-08-19  **M6 actually closed, and two boxes that claimed to be done weren't.** The manual
   OpenAI spend cap is set. The **keep-warm workflow had never pinged anything**: the
   `API_HEALTH_URL` repo variable was never set, so every run since the deploy took the no-op
