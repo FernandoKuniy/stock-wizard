@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useActionState } from "react";
 
 import { signIn, signUp, type AuthState } from "./actions";
 
@@ -64,6 +65,9 @@ export default function LoginPage() {
           <p className="mt-1 text-xs text-zinc-400">Only needed to create an account.</p>
         </div>
 
+        <Suspense fallback={null}>
+          <ConfirmationNotice />
+        </Suspense>
         {state.error && <p className="text-sm text-red-500">{state.error}</p>}
         {state.notice && <p className="text-sm text-zinc-600 dark:text-zinc-400">{state.notice}</p>}
 
@@ -89,5 +93,21 @@ export default function LoginPage() {
         </div>
       </form>
     </main>
+  );
+}
+
+/**
+ * Shown when a confirmation link didn't work: expired, already used, or opened in a different
+ * browser than it was requested from (the PKCE case). Signing in normally works from here, so
+ * this says that rather than dwelling on why. Kept vague on purpose: a login screen shouldn't
+ * confirm whether an address has an account.
+ */
+function ConfirmationNotice() {
+  const confirmed = useSearchParams().get("confirmed");
+  if (confirmed !== "0") return null;
+  return (
+    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      That confirmation link has already been used or has expired. Sign in below and you&apos;re in.
+    </p>
   );
 }
