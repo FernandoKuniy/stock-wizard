@@ -2,7 +2,12 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// jsdom does no layout, so it doesn't implement scrollIntoView. Anything that follows a
+// growing list down the page calls it (the tutor does, on every new message), and without a
+// stub the effect throws a TypeError that surfaces as some unrelated assertion failing.
+Element.prototype.scrollIntoView = vi.fn();
 
 // Unmount whatever a test rendered before the next one runs. Testing Library does this by
 // itself only when Vitest's `globals` are on, and they aren't here, so without this every
