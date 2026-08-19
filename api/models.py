@@ -41,6 +41,16 @@ class User(Base):
     auth_id: Mapped[UUID | None] = mapped_column(Uuid(), unique=True, index=True, default=None)
     email: Mapped[str] = mapped_column(String(255), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # True when this account was opened with the published demo code rather than the private
+    # one. A demo user gets a small lifetime allowance of tutor questions and then a pointer
+    # to ask for a full code. Everything else in the app works exactly the same for them:
+    # they trade, chart, and learn without limits, because none of that costs us per call.
+    is_demo: Mapped[bool] = mapped_column(Boolean(), default=False, server_default=text("false"))
+    # Tutor questions this user has ever spent. On the user, not the account, and deliberately
+    # so: a reset wipes money, and if the counter lived on the account a reset would hand out
+    # a fresh question every time. Same reasoning achievements use for surviving a reset.
+    # Only counted for demo users, since they're the only ones it's enforced against.
+    tutor_messages_used: Mapped[int] = mapped_column(default=0, server_default=text("0"))
 
     accounts: Mapped[list[Account]] = relationship(back_populates="user")
 
