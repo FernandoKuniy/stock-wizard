@@ -54,5 +54,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except static assets, so a redirect never eats the CSS or the images.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  //
+  // The icon and social-card routes have to be public too. Every request for them comes from
+  // someone signed out: a browser drawing the tab icon on the login screen, or Slack and
+  // LinkedIn fetching the preview card for a pasted link. Left in, they'd be redirected to
+  // /login and the link would unfurl with no image.
+  matcher: ["/((?!_next/static|_next/image|icon$|apple-icon$|opengraph-image$|.*\\.svg$).*)"],
 };
