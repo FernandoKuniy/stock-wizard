@@ -401,10 +401,17 @@ class MeOut(BaseModel):
 
     ``provisioned`` is false for a signed-in user who hasn't redeemed a code, which is how
     the frontend decides to show the redeem screen's bare header rather than the full app
-    chrome."""
+    chrome.
+
+    ``tutor_messages_left`` is None for a full account (no limit) and a count for a demo one,
+    so the tutor panel can say how many questions are left and swap in the "ask for a full
+    code" banner at zero. The layout already fetches this on every render, so the panel costs
+    no extra request."""
 
     email: str
     provisioned: bool
+    is_demo: bool = False
+    tutor_messages_left: int | None = None
 
 
 class RedeemInviteRequest(BaseModel):

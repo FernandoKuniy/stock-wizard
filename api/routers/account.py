@@ -14,7 +14,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
-from auth import AuthIdentity, get_auth_identity, get_or_create_user, get_signup_code
+from auth import (
+    AuthIdentity,
+    get_auth_identity,
+    get_demo_signup_code,
+    get_demo_tutor_message_limit,
+    get_or_create_user,
+    get_signup_code,
+)
 from config import get_settings
 from models import User
 from routers.common import AccountDep, CandleDep, DividendDep, MarketDep, SessionDep
@@ -38,6 +45,7 @@ def get_seed_new_accounts() -> bool:
 def read_me(
     identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
     session: SessionDep,
+    demo_limit: Annotated[int, Depends(get_demo_tutor_message_limit)],
 ) -> MeOut:
     """Who the caller is, and whether they've redeemed an invite code yet.
 
@@ -47,7 +55,10 @@ def read_me(
     of the full app chrome.
     """
     user = session.scalar(select(User).where(User.auth_id == identity.auth_id))
-    return MeOut(email=identity.email, provisioned=user is not None)
+    if user is None or not user.is_demo:
+        return MeOut(email=identity.email, provisioned=user is not None)
+    left = max(0, demo_limit - user.tutor_messages_used)
+    return MeOut(email=identity.email, provisioned=True, is_demo=True, tutor_messages_left=left)
 
 
 @router.post("/api/redeem-invite")
@@ -57,6 +68,7 @@ def redeem_invite(
     session: SessionDep,
     candles: CandleDep,
     signup_code: Annotated[str | None, Depends(get_signup_code)],
+    demo_code: Annotated[str | None, Depends(get_demo_signup_code)],
     seed_sample: Annotated[bool, Depends(get_seed_new_accounts)],
 ) -> RedeemInviteOut:
     """Trade a valid invite code for a funded account, opening the door to the rest of the app.
@@ -66,9 +78,10 @@ def redeem_invite(
     user who hasn't redeemed yet, the very people who need this route).
 
     A user who already has an account is waved through: redeeming twice is a harmless no-op, so
-    a double submit or a stale tab can never lock anyone out. Otherwise the code must match the
-    configured one, compared in constant time so the endpoint can't be used as a timing oracle.
-    With no code configured the gate is off and any signed-in user is simply provisioned.
+    a double submit or a stale tab can never lock anyone out. Otherwise the code must match one
+    of the two configured ones (see ``_match_code``): the private code opens a full account, and
+    the publishable demo code opens one whose tutor has a small lifetime allowance. With no code
+    configured the gate is off and any signed-in user is simply provisioned, full tier.
 
     When ``seed_new_accounts`` is on (the hosted demo), a fresh account is filled with the
     sample six-month portfolio so it teaches from the first screen. Seeding is best-effort: if
@@ -79,12 +92,10 @@ def redeem_invite(
     if existing is not None:
         return RedeemInviteOut()
 
-    if signup_code is not None and not hmac.compare_digest(body.code.strip(), signup_code):
-        raise HTTPException(
-            status_code=403, detail="That invite code isn't right. Check it and try again."
-        )
+    is_demo = _match_code(body.code.strip(), full=signup_code, demo=demo_code)
 
     user = get_or_create_user(session, auth_id=identity.auth_id, email=identity.email)
+    user.is_demo = is_demo
     account, _ = get_or_create_account(
         session, user, starting_balance=get_settings().starting_balance
     )
@@ -97,6 +108,27 @@ def redeem_invite(
             logger.warning("Could not seed a new account with sample history: %s", exc)
     session.commit()
     return RedeemInviteOut()
+
+
+def _match_code(submitted: str, *, full: str | None, demo: str | None) -> bool:
+    """Check a submitted invite code and report whether it was the demo one.
+
+    Returns False for the full code (and for no gate at all, the local-development default),
+    True for the publishable demo code, and raises 403 for anything else. Both comparisons are
+    constant time, so the endpoint can't be used as a timing oracle to guess either code. A
+    wrong code always runs both, so a near miss on one can't be told apart from a near miss on
+    the other. The demo code only means anything when the gate is on: with no full code
+    configured there is nothing to gate, and everyone is full tier.
+    """
+    if full is None:
+        return False
+    if hmac.compare_digest(submitted, full):
+        return False
+    if demo is not None and hmac.compare_digest(submitted, demo):
+        return True
+    raise HTTPException(
+        status_code=403, detail="That invite code isn't right. Check it and try again."
+    )
 
 
 @router.post("/api/account/reset")
