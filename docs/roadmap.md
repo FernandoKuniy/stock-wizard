@@ -311,6 +311,21 @@ the caches absorb it).
 
 ## Progress log
 
+- 2026-08-19  **Signup is one round trip now.** Confirming your email signs you in and lands you on
+  the dashboard, instead of the old three-step slog: type the code, click the link, sign in by
+  hand, then type the code *again* on `/redeem`. Root cause was that **no auth callback route
+  existed at all**, so the confirmation link hit the site root, the proxy saw no session, and
+  bounced to `/login`; the code had nowhere to live across the email trip either. Added
+  `app/auth/confirm/route.ts` (a route handler, because a Server Component can read cookies but
+  not set them), which verifies the token, redeems the code stashed in `user_metadata` at signup,
+  and redirects. It takes **both** link shapes, `token_hash` and the default template's `code`, so
+  it isn't broken by a dashboard setting nobody changed; the `token_hash` form is worth the
+  template edit because it survives confirming on a different device. `proxy.ts` lets `/auth`
+  through in both session states, since signed-out it creates the session and signed-in it still
+  has to run the redeem. `signIn` redeems from metadata too, covering laptop-then-phone. Metadata
+  is a carrier, not a credential: the API verifies the code exactly as before. A dead link lands on
+  `/login?confirmed=0` with a note; `/redeem` stays as the fallback. 31 frontend tests (5 new).
+
 - 2026-08-19  **M13: a demo code anyone can use.** The README now publishes an invite code, so the
   live link is something a stranger can actually try instead of a form asking them to email first.
   The tutor is the only capped thing (one question, `users.tutor_messages_used`), because it's the

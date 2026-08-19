@@ -163,11 +163,40 @@ and the glossary are untouched, because none of them cost anything a cache doesn
   limit to `0` is the kill switch: it is compared per request, so it takes effect on restart
   without rotating the published code or changing any code.
 
+### Signup, confirmation, and the one-click return
+
+Email confirmation is on in any public environment (it's the only brake on one person minting
+accounts with throwaway addresses), which splits signup across two visits: the form, then the
+click in the inbox. The problem that creates is that **at signup there is no session to redeem
+the code with, and by the time there is one the form is gone**. Left unsolved it made people
+type the code, sign in by hand, and then type the code a second time on `/redeem`.
+
+- The code rides along in the Supabase user's `user_metadata` (`options.data` at signup) and is
+  redeemed automatically once a session exists. **Metadata is a carrier, never a credential**: it
+  is writable by the user it belongs to, so nothing trusts it. The API verifies the value against
+  `SIGNUP_CODE` / `DEMO_SIGNUP_CODE` exactly as it would one typed into a form, and a made-up
+  value gets the same 403.
+- `app/auth/confirm/route.ts` is where the email link lands. It turns the token into a session
+  (which is why it's a route handler: a Server Component can read cookies but not set them),
+  redeems the stashed code, and drops the user on the dashboard. It accepts both `token_hash`
+  (from a `{{ .TokenHash }}` template, verifies standalone, survives confirming on a different
+  device) and `code` (the default template's PKCE exchange, same-browser only), so the flow works
+  whether or not the email template has been customised.
+- `proxy.ts` lets `/auth` through **whatever the session state is**. Signed out it must run,
+  because it is the request that creates the session; signed in it must still run, or clicking a
+  link twice would skip the redeem on the way through. It does its own redirecting.
+- `signIn` also redeems from metadata, which covers signing up on a laptop and confirming on a
+  phone. Redeeming is idempotent, so for an existing account it's a cheap no-op.
+- A dead link (expired, reused, or PKCE in the wrong browser) lands on `/login?confirmed=0` with
+  a note to sign in normally, which works because the address is confirmed by then. `/redeem`
+  survives as the fallback for anyone whose automatic redeem didn't land, and for accounts made
+  before the code travelled in metadata.
+
 This is upstream of, and independent from, the account-scoping boundary below: scoping keeps one
 account's money out of another's; the gate decides who gets an account at all. Frontend: an
-invite field on signup redeems in the same step when email confirmation is off, a `/redeem`
-screen handles the retry and the email-confirmation path, and pages send an `invite_required`
-error to `/redeem` instead of showing it.
+invite field on signup redeems in the same step when email confirmation is off, `/auth/confirm`
+does it automatically when confirmation is on (see below), a `/redeem` screen handles the retry,
+and pages send an `invite_required` error to `/redeem` instead of showing it.
 
 **IMPORTANT: Supabase Row Level Security is not our authorization boundary.** We reach Postgres
 over a direct connection (the session pooler), not through PostgREST, so RLS never runs on our

@@ -33,10 +33,20 @@ In the project dashboard:
   [decisions.md](decisions.md), 2026-07-28.
 - **Authentication → Sign In / Providers**: JWT signing keys must be **asymmetric (ES256/RS256)** —
   the default for new projects. The API rejects the legacy shared HS256 secret.
-- **Email confirmation**: for the smoothest demo, turn it **off** (Authentication → Sign In /
-  Providers → Email). Then signup is one step: enter email, password, and the invite code, and
-  you're in. Left on, new users must click an email link first, and Supabase's built-in mailer is
-  rate-limited and lands in spam, so you'd want custom SMTP — not worth it for an invite-only demo.
+- **Email confirmation**: leave it **on** for a public environment. It's the only thing stopping
+  one person minting unlimited accounts with throwaway addresses, which matters now that an
+  invite code is published in the README. Turning it off locally is still fine and makes signup a
+  single step. Supabase's built-in mailer is rate-limited and can land in spam; custom SMTP is a
+  deliberate non-goal for a demo.
+- **Email template**: Authentication → Emails → **Confirm signup**. Point the link at the app's
+  own callback so clicking it signs the user in:
+  ```
+  {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup
+  ```
+  The default `{{ .ConfirmationURL }}` also works, because `/auth/confirm` handles both shapes,
+  but only in the same browser the signup happened in (it's a PKCE exchange against a cookie).
+  The `token_hash` form verifies on its own, so signing up on a laptop and opening the email on a
+  phone works. That split is common enough to be worth the edit.
 - Leave the **Site URL / Redirect URLs** for now; you'll set them to the Vercel URL in step 4.
 
 ## 2. Backend on Render
@@ -75,9 +85,13 @@ Now that both URLs exist:
 - **Render → `FRONTEND_ORIGIN`** → the Vercel URL (no trailing slash), then redeploy the backend.
   This is what lets the browser call the API cross-origin. Comma-separate if you also want a
   preview URL or custom domain allowed.
-- **Supabase → Authentication → URL Configuration** → set **Site URL** to the Vercel URL and add it
-  under **Redirect URLs**, so confirmation and password emails point at the deployed app, not
-  localhost.
+- **Supabase → Authentication → URL Configuration** → set **Site URL** to the Vercel URL and add
+  it under **Redirect URLs**, so confirmation and password emails point at the deployed app, not
+  localhost. Signup asks Supabase to send people back to `<your site>/auth/confirm`, and Supabase
+  refuses any redirect target that isn't on this list, so add `https://<your-app>.vercel.app/**`
+  (and `http://localhost:3000/**` if you want to test the email flow locally). A confirmation link
+  that lands on `/login?confirmed=0` instead of the dashboard usually means this list is missing
+  the URL.
 
 ## 5. Keep it warm
 
