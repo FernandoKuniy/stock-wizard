@@ -21,11 +21,27 @@ API bills. Want to try it? Reach out for a code. Running it locally skips the ga
 
 ## Screenshots
 
-<!-- TODO after deploy: drop a GIF or a few PNGs here, saved under docs/screenshots/.
-     Suggested shots: the Overview with the S&P 500 benchmark line, a stock page with the
-     price chart and the "what if you'd invested" panel, and the AI tutor slide-over. -->
+**The overview** answers one question in money, not percentages: how are you doing, and would you
+have done better just buying the whole market?
 
-_Coming soon._ The [live demo](#live-demo) is the fastest look in the meantime.
+![The overview, showing total value and the portfolio line tracked against the S&P 500](docs/screenshots/overview.png)
+
+**The AI tutor** reads your actual portfolio and explains it back to you. Every figure it quotes
+was computed by the backend first, so it can't invent a number, and it never tells you to buy or
+sell anything.
+
+![The AI tutor explaining why the portfolio is ahead of the S&P 500, quoting figures from the backend](docs/screenshots/tutor.png)
+
+**A stock page** has the live price, a plain-English line on what the company does, and buying by
+dollar amount rather than share count. The blue box is the kind of explainer that appears the
+first time you meet a new idea.
+
+![The Apple stock page with a price chart, company details, and a buy form](docs/screenshots/stock.png)
+
+**Activity** covers resting limit orders, the watchlist, and the dividends companies paid you just
+for holding their stock.
+
+![The activity page showing recent orders, a watchlist, and a table of dividend payments](docs/screenshots/activity.png)
 
 ## What it does
 
