@@ -9,9 +9,11 @@ financial advice.
 
 ## Live demo
 
-<!-- TODO after deploy: replace the line below with the real URL. -->
+**[stockwiz.vercel.app](https://stockwiz.vercel.app)**
 
-_Deploying to Vercel + Render — live URL going here._
+The frontend runs on Vercel, the api on Render (`stock-wizard-api.onrender.com`), and both talk to
+the same Supabase project. A scheduled ping keeps the free tiers awake, so the link shouldn't cold
+start on you.
 
 Signup is **invite-only**, so a public link isn't open to every passer-by and bot spending the
 API bills. Want to try it? Reach out for a code. Running it locally skips the gate entirely (see
