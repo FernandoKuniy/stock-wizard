@@ -60,9 +60,8 @@ export default async function HoldingsPage() {
           <>
             {portfolio.unpriced_symbols.length > 0 && (
               <p className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-                We couldn&apos;t get a live price for {portfolio.unpriced_symbols.join(", ")} just
-                now, so it&apos;s counted at what you paid. Your totals are a little stale, not
-                wrong.
+                We couldn&apos;t get a live price for {portfolio.unpriced_symbols.join(", ")}
+                {` just now, so it's counted at what you paid. Your totals are a little stale, not wrong.`}
               </p>
             )}
             {checkup.length > 0 && (

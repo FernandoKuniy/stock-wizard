@@ -29,8 +29,8 @@ export function StartHere({ cash }: { cash: number }) {
   return (
     <section className="rounded-xl border border-dashed border-zinc-300 p-6 dark:border-zinc-700">
       <h2 className="text-lg font-medium">
-        You&apos;ve got <span className="calm">{formatMoney(cash)}</span> of fake money. Here&apos;s
-        where to start.
+        You&apos;ve got <span className="calm">{formatMoney(cash)}</span>
+        {` of fake money. Here's where to start.`}
       </h2>
 
       <ol className="mt-4 space-y-4">

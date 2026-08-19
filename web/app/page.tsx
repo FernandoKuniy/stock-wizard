@@ -67,8 +67,12 @@ export default async function Home() {
         <h1 className="text-2xl font-semibold tracking-tight">How you&apos;re doing</h1>
 
         <FirstTimeCallout id="welcome" title="None of this is real money">
-          You&apos;ve got {formatMoney(portfolio.starting_balance)} of fake cash and real market
-          prices. Buy things, get them wrong, hit reset. That&apos;s the whole point.
+          {/* The text after the amount is a string, not JSX text, on purpose. A JSX text node
+              that both starts with a space and contains an entity (the &apos; below) loses that
+              leading space when it compiles, so this used to render "$100,000.00of fake cash".
+              Prettier rewrites a {" "} back to a plain space, so a string is what sticks. */}
+          You&apos;ve got {formatMoney(portfolio.starting_balance)}
+          {` of fake cash and real market prices. Buy things, get them wrong, hit reset. That's the whole point.`}
         </FirstTimeCallout>
 
         {portfolio.is_sample && <SampleBanner />}
@@ -77,8 +81,8 @@ export default async function Home() {
 
         {portfolio.unpriced_symbols.length > 0 && (
           <p className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-            We couldn&apos;t get a live price for {portfolio.unpriced_symbols.join(", ")} just now,
-            so it&apos;s counted at what you paid. Your totals are a little stale, not wrong.
+            We couldn&apos;t get a live price for {portfolio.unpriced_symbols.join(", ")}
+            {` just now, so it's counted at what you paid. Your totals are a little stale, not wrong.`}
           </p>
         )}
 
