@@ -78,7 +78,7 @@ describe("TutorPanel", () => {
     render(<TutorPanel />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    askTutorAbout("Am I diversified?");
+    askTutorAbout("What counts as a dividend?");
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
   });
 
@@ -89,5 +89,59 @@ describe("TutorPanel", () => {
     await user.click(open());
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(streamTutor).not.toHaveBeenCalled();
+  });
+
+  it("keeps the conversation when the panel is closed and reopened", async () => {
+    const user = userEvent.setup();
+    render(<TutorPanel />);
+
+    askTutorAbout("Why is my portfolio beating the market?");
+    expect(await screen.findByText(/because your biggest positions are up/i)).toBeInTheDocument();
+
+    await user.click(closeButton());
+    await user.click(open());
+
+    // Nothing is stored server-side, so losing it on close meant losing it for good.
+    expect(screen.getByText(/because your biggest positions are up/i)).toBeInTheDocument();
+    expect(screen.getByText(/why is my portfolio beating the market/i)).toBeInTheDocument();
+  });
+
+  it("offers a new chat only once there is something to lose", async () => {
+    const user = userEvent.setup();
+    render(<TutorPanel />);
+
+    await user.click(open());
+    expect(screen.queryByRole("button", { name: /new chat/i })).not.toBeInTheDocument();
+
+    askTutorAbout("What counts as a dividend?");
+    expect(await screen.findByRole("button", { name: /new chat/i })).toBeInTheDocument();
+  });
+
+  it("warns before clearing, and keeps the chat if you cancel", async () => {
+    const user = userEvent.setup();
+    render(<TutorPanel />);
+
+    askTutorAbout("What counts as a dividend?");
+    await user.click(await screen.findByRole("button", { name: /new chat/i }));
+
+    expect(screen.getByText(/clears this conversation/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.getByText(/what counts as a dividend/i)).toBeInTheDocument();
+    expect(screen.queryByText(/clears this conversation/i)).not.toBeInTheDocument();
+  });
+
+  it("clears the chat once the warning is accepted", async () => {
+    const user = userEvent.setup();
+    render(<TutorPanel />);
+
+    askTutorAbout("What counts as a dividend?");
+    await user.click(await screen.findByRole("button", { name: /new chat/i }));
+    await user.click(screen.getByRole("button", { name: /yes, clear it/i }));
+
+    expect(screen.queryByText(/what counts as a dividend/i)).not.toBeInTheDocument();
+    // Back to the empty state, and nothing was re-asked on the way out.
+    expect(screen.queryByRole("button", { name: /new chat/i })).not.toBeInTheDocument();
+    expect(streamTutor).toHaveBeenCalledTimes(1);
   });
 });
