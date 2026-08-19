@@ -247,6 +247,13 @@ export function isInviteRequired(e: unknown): boolean {
   return e instanceof ApiError && e.code === "invite_required";
 }
 
+// True when a demo account has spent its tutor allowance. The cap is enforced server-side
+// (see api/routers/tutor.py), so this is how the panel knows to show the "ask for a code"
+// banner even if the client's own count is stale.
+export function isDemoLimitReached(e: unknown): boolean {
+  return e instanceof ApiError && e.code === "demo_limit_reached";
+}
+
 async function request<T>(path: string, token: Token, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     // Always hit the backend: balances and prices must be live, never cached.
@@ -287,7 +294,16 @@ async function request<T>(path: string, token: Token, init?: RequestInit): Promi
 
 // Who the signed-in user is, and whether they've redeemed an invite code. `provisioned` is
 // false for someone who is signed in but hasn't been let past the gate yet.
-export type Me = { email: string; provisioned: boolean };
+//
+// `is_demo` marks an account opened with the published demo code: everything works except
+// that the tutor has a lifetime allowance, and `tutor_messages_left` counts it down. A full
+// account has no allowance to count, so it reports null.
+export type Me = {
+  email: string;
+  provisioned: boolean;
+  is_demo: boolean;
+  tutor_messages_left: number | null;
+};
 
 // Answers even for a not-yet-invited user (it doesn't go through the account gate), so the
 // layout can tell "signed in" from "actually let in" and pick the right header.
@@ -295,8 +311,11 @@ export const getMe = (token: Token) => request<Me>("/api/me", token);
 
 // Trade a valid invite code for a funded account. Redeeming when already provisioned is a
 // harmless no-op, so a retry or a stale tab can't lock anyone out.
+// The response reports the tier the account ended up on, which is how the tutor's "already
+// have a code?" form tells a real upgrade from a no-op: redeeming is deliberately forgiving,
+// so a wrong code comes back ok, just still on the demo tier.
 export const redeemInvite = (code: string, token: Token) =>
-  request<{ status: string }>("/api/redeem-invite", token, {
+  request<{ status: string; is_demo: boolean }>("/api/redeem-invite", token, {
     method: "POST",
     body: JSON.stringify({ code }),
   });
