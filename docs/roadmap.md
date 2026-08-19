@@ -132,7 +132,7 @@ Done already (the pre-launch hardening that kicked this off):
 
 Safety and cost:
 
-- [ ] Set a hard OpenAI spend cap at the billing level (dashboard, manual), so a runaway can't
+- [x] Set a hard OpenAI spend cap at the billing level (dashboard, manual), so a runaway can't
       run up an unbounded bill.
 - [x] A light per-account throttle on the tutor endpoint, so one account (or a leaked invite
       code) can't loop the tutor and drive up the OpenAI bill.
@@ -165,9 +165,8 @@ Deploy (Vercel for `web/`, Render for `api/`):
 
 The app is **deployed**: Vercel for `web/`, Render for `api/`. The Render blueprint
 (`render.yaml`, migrations run on start via the start command), multi-origin CORS through
-`FRONTEND_ORIGIN`, and the keep-warm workflow carried it. The one box still open, the manual
-OpenAI spend cap above, is *not* part of the Vercel/Render deploy: it's an OpenAI-dashboard
-action, and it's the last cost-safety step worth doing now the app is publicly reachable.
+`FRONTEND_ORIGIN`, and the keep-warm workflow carried it. Every box in M6 is now closed, the
+manual OpenAI spend cap included.
 
 - [x] Set every env var in both hosts, including `SIGNUP_CODE` on Render and the Twelve Data key
       (the auto-seed needs it).
@@ -286,6 +285,17 @@ shared-cache infrastructure (over-engineering for an invite-only demo).
 
 ## Progress log
 
+- 2026-08-19  **M6 actually closed, and two boxes that claimed to be done weren't.** The manual
+  OpenAI spend cap is set. The **keep-warm workflow had never pinged anything**: the
+  `API_HEALTH_URL` repo variable was never set, so every run since the deploy took the no-op
+  branch and exited green while Render went cold and Supabase drifted toward its 7-day pause. The
+  variable is set now, and the first real ping promptly timed out at the old 30s cap against a
+  cold instance, so the curl gets 120s and two retries. A cold boot is the exact case this job
+  exists to prevent, and it can't be the case that fails it. Likewise the "README as a landing
+  page" box was ticked while the live URL and the screenshots were both still TODO placeholders;
+  the URL is in now, screenshots next. Also filled in the repo's GitHub description and topics,
+  empty until today. Worth keeping: a green scheduled job proves the workflow ran, not that it
+  did anything.
 - 2026-08-18  **Deployed.** The web is live on Vercel and the api on Render; the blueprint,
   multi-origin CORS, migrate-on-start, and the keep-warm workflow all carried it. M6's deploy
   boxes are ticked. The one remaining M6 item is the **manual OpenAI spend cap** (an
