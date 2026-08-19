@@ -24,10 +24,20 @@ export function TutorPanel({ messagesLeft = null }: { messagesLeft?: number | nu
 
   // Closing puts focus back where it came from. Without this a keyboard user lands back at
   // the top of the document and has to tab through the whole header again.
+  //
+  // It also drops any question that never got asked. One can still be sitting here if it
+  // arrived while an earlier answer was streaming, and closing the panel is a clear enough
+  // "not now" that reopening it later shouldn't fire it.
   const close = useCallback(() => {
     setOpen(false);
+    setPending(null);
     triggerRef.current?.focus();
   }, []);
+
+  // The tutor takes the question the moment it sends it. Clearing it here is what stops it
+  // being asked again: the tutor unmounts with the panel, so its own "already asked" guard
+  // does not survive a reopen, but this state does.
+  const clearPending = useCallback(() => setPending(null), []);
 
   // An "explain this" button anywhere opens the panel and hands the tutor a question.
   useEffect(
@@ -91,7 +101,11 @@ export function TutorPanel({ messagesLeft = null }: { messagesLeft?: number | nu
               </button>
             </div>
             <div className="min-h-0 flex-1">
-              <Tutor pending={pending} messagesLeft={messagesLeft} />
+              <Tutor
+                pending={pending}
+                onPendingHandled={clearPending}
+                messagesLeft={messagesLeft}
+              />
             </div>
             {/* The glossary lives behind the panel rather than in the nav: it's the same
                 "I don't know what that means" moment, and the nav stays at three places. */}

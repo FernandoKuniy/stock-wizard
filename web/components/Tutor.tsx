@@ -28,9 +28,12 @@ const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the m
  */
 export function Tutor({
   pending,
+  onPendingHandled,
   messagesLeft = null,
 }: {
   pending?: { text: string; key: number } | null;
+  /** Called once the pending question has been taken, so it can't be asked twice. */
+  onPendingHandled?: () => void;
   /** A demo account's remaining questions, or null for a full account with no cap. */
   messagesLeft?: number | null;
 }) {
@@ -126,12 +129,18 @@ export function Tutor({
 
   // An "explain this" button elsewhere can hand us a question. Send it once (keyed so
   // React's dev double-run doesn't fire it twice), after any in-flight answer finishes.
+  //
+  // Telling the panel we've taken it is what makes it a genuine one-shot. This component is
+  // unmounted whenever the panel closes, so `handledKey` is gone by the time it reopens while
+  // the question, which lives in the panel, is not. Without this the same question fired again
+  // on every reopen, forever.
   useEffect(() => {
     if (pending && pending.key !== handledKey.current && !busy) {
       handledKey.current = pending.key;
+      onPendingHandled?.();
       void sendRef.current(pending.text);
     }
-  }, [pending, busy]);
+  }, [pending, busy, onPendingHandled]);
 
   // Trade a code for an uncapped tutor. Redeeming is forgiving by design, so a wrong code
   // comes back ok and still on the demo tier; that's what tells us it didn't work.
