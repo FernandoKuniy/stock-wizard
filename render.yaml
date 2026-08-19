@@ -22,6 +22,12 @@ services:
         value: "3.12"
       - key: SEED_NEW_ACCOUNTS
         value: "true"
+      # How many tutor questions a demo account gets, ever. A plain value, not `sync: false`:
+      # it isn't a secret, and a `sync: false` prompt left blank would set it to an empty
+      # string, which can't parse as an int and would stop the service booting. Set it to 0
+      # to switch the demo tutor off without rotating the published code below.
+      - key: DEMO_TUTOR_MESSAGE_LIMIT
+        value: "1"
       # --- Set these in the Render dashboard; they never live in git. ---
       - key: DATABASE_URL # Supabase session-mode pooler URL (postgresql://...)
         sync: false
@@ -34,6 +40,11 @@ services:
       - key: OPENAI_API_KEY # the AI tutor; optional
         sync: false
       - key: SIGNUP_CODE # the invite gate; use a long random value
+        sync: false
+      # The published demo code from the README. Not a secret, but kept here rather than in
+      # git so it can be rotated from the dashboard in seconds if the link travels further
+      # than you wanted. Must differ from SIGNUP_CODE; the app refuses to start otherwise.
+      - key: DEMO_SIGNUP_CODE
         sync: false
       - key: FRONTEND_ORIGIN # the Vercel URL, e.g. https://stock-wizard.vercel.app
         sync: false

@@ -13,10 +13,15 @@ frontend, then wire the two together. Follow the steps in order.
 - Free accounts on [Render](https://render.com) and [Vercel](https://vercel.com), each connected
   to the GitHub repo.
 - Your API keys ready: Finnhub, Twelve Data, and OpenAI (optional).
-- Pick a **`SIGNUP_CODE`** — a long random invite code. Generate one:
+- Pick a **`SIGNUP_CODE`**, a long random invite code. This one is a real secret: it's the
+  only code that grants an uncapped tutor. Generate one:
   ```bash
   python3 -c "import secrets; print(secrets.token_urlsafe(24))"
   ```
+- Pick a **`DEMO_SIGNUP_CODE`** too, the one published in the README. Not a secret (it's public
+  by design), so make it short and memorable rather than random. It must differ from
+  `SIGNUP_CODE`; the API refuses to start if they match. Whatever you choose here has to match
+  the README exactly, or the published code simply won't work.
 
 ## 1. Supabase
 
@@ -42,8 +47,11 @@ The repo ships a blueprint at [`render.yaml`](../render.yaml).
    `render.yaml` and creates the `stock-wizard-api` web service (build with uv, migrate on start,
    health check at `/health`).
 2. Fill in the env vars it marks as required (`sync: false`): `DATABASE_URL`, `SUPABASE_URL`,
-   `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `OPENAI_API_KEY`, `SIGNUP_CODE`. Leave `FRONTEND_ORIGIN`
-   blank or set a placeholder for now — you'll set it in step 4.
+   `FINNHUB_API_KEY`, `TWELVE_DATA_API_KEY`, `OPENAI_API_KEY`, `SIGNUP_CODE`, `DEMO_SIGNUP_CODE`.
+   Leave `FRONTEND_ORIGIN` blank or set a placeholder for now, you'll set it in step 4.
+   `DEMO_TUTOR_MESSAGE_LIMIT` is already in the blueprint as `1`; don't convert it to
+   `sync: false`, because a blank value there can't parse as an integer and the service won't
+   boot. Set it to `0` any time you want to switch the demo tutor off.
 3. Deploy. The start command runs `alembic upgrade head` before serving, so the schema (including
    the `is_sample` column from migration `0007`) is applied automatically.
 4. When it's live, note the URL (e.g. `https://stock-wizard-api.onrender.com`) and check it:
