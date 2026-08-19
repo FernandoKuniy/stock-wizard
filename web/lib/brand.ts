@@ -20,22 +20,35 @@ export const BRAND = {
 } as const;
 
 /**
+ * The mark's geometry, on a 32x32 grid. Exported as bare path data so the two ways it gets
+ * drawn stay one shape: this module builds an SVG string for `next/og` to rasterise, and
+ * `components/BrandMark.tsx` renders the same paths as JSX for the header.
+ */
+export const MARK_VIEWBOX = "0 0 32 32";
+// A four-point spark. The curves pull back to the center, which is what makes the arms taper
+// instead of reading as a plus sign.
+export const MARK_SPARK_PATH =
+  "M8.5 3.5C8.5 8.5 8.5 8.5 13.5 8.5C8.5 8.5 8.5 8.5 8.5 13.5C8.5 8.5 8.5 8.5 3.5 8.5C8.5 8.5 8.5 8.5 8.5 3.5Z";
+export const MARK_LINE_PATH = "M6 24L13 18L18 21L26 11";
+export const MARK_LINE_WIDTH = 3;
+/** Default corner rounding for the tile, on the same 32-unit grid. */
+export const MARK_RADIUS = 7;
+
+/**
  * The mark at any size. `radius` rounds the tile's corners; pass 0 for iOS, which masks the
  * icon into its own shape and looks wrong if we round it first.
  */
-export function markSvg(size: number, radius = 7): string {
+export function markSvg(size: number, radius: number = MARK_RADIUS): string {
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${MARK_VIEWBOX}">`,
     `<rect width="32" height="32" rx="${radius}" fill="${BRAND.tile}"/>`,
-    // A four-point spark. The curves pull back to the center, which is what makes the arms
-    // taper instead of reading as a plus sign.
-    `<path d="M8.5 3.5C8.5 8.5 8.5 8.5 13.5 8.5C8.5 8.5 8.5 8.5 8.5 13.5C8.5 8.5 8.5 8.5 3.5 8.5C8.5 8.5 8.5 8.5 8.5 3.5Z" fill="${BRAND.spark}"/>`,
-    `<path d="M6 24L13 18L18 21L26 11" fill="none" stroke="${BRAND.line}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${MARK_SPARK_PATH}" fill="${BRAND.spark}"/>`,
+    `<path d="${MARK_LINE_PATH}" fill="none" stroke="${BRAND.line}" stroke-width="${MARK_LINE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`,
     `</svg>`,
   ].join("");
 }
 
 /** The same mark as a data URI, the form `next/og` can draw. */
-export function markDataUri(size: number, radius = 7): string {
+export function markDataUri(size: number, radius: number = MARK_RADIUS): string {
   return `data:image/svg+xml;base64,${Buffer.from(markSvg(size, radius)).toString("base64")}`;
 }

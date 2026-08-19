@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import Link from "next/link";
 
+import { BrandMark } from "@/components/BrandMark";
 import { CalmToggle } from "@/components/CalmToggle";
 import { Nav } from "@/components/Nav";
 import { TickerSearch } from "@/components/TickerSearch";
@@ -87,7 +88,11 @@ export default async function RootLayout({
       <body className="flex min-h-full flex-col">
         <header className="border-b border-zinc-200 dark:border-zinc-800">
           <div className="mx-auto flex w-full max-w-4xl items-center gap-4 px-6 py-3">
-            <Link href="/" className="font-semibold tracking-tight whitespace-nowrap">
+            <Link
+              href="/"
+              className="flex items-center gap-2 font-semibold tracking-tight whitespace-nowrap"
+            >
+              <BrandMark />
               Stock Wizard
             </Link>
             {/* Search only makes sense once you're in. Keep the spacer either way so Sign
