@@ -21,10 +21,17 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from auth import get_signup_code, get_token_verifier
+from auth import (
+    get_demo_signup_code,
+    get_demo_tutor_message_limit,
+    get_signup_code,
+    get_token_verifier,
+)
+from config import Settings
 from db import get_db
 from main import app
 from models import Account, Transaction
@@ -43,7 +50,12 @@ from services.market.client import (
     get_market_client,
 )
 from services.market.dividends import StaticDividendProvider, get_dividend_provider
-from services.tutor.provider import Completion, TutorProvider, get_tutor_provider
+from services.tutor.provider import (
+    Completion,
+    TutorError,
+    TutorProvider,
+    get_tutor_provider,
+)
 
 # Two signed-in people, each with their own Supabase user id.
 TOKEN_ALEX = "alex-token"
@@ -1324,3 +1336,154 @@ def test_round2_normalizes_negative_zero() -> None:
     # A sub-cent negative residual must not surface as -0.0 in the JSON.
     assert _round2(Decimal("-0.0001")) == 0.0
     assert str(_round2(Decimal("-0.0001"))) == "0.0"
+
+
+# --- the demo tier -----------------------------------------------------------------------
+# A second, publishable invite code opens a real account whose tutor has a small lifetime
+# allowance. Everything else about the app is identical: only the route that costs us money
+# per call is capped. These prove the cap holds where it has to and never bites a full user.
+
+DEMO_CODE = "published-demo-code"
+
+
+@pytest.fixture
+def two_codes(overrides: None) -> None:
+    """Turn the gate on with both a private code and a publishable demo one."""
+    app.dependency_overrides[get_signup_code] = lambda: INVITE_CODE
+    app.dependency_overrides[get_demo_signup_code] = lambda: DEMO_CODE
+    app.dependency_overrides[get_demo_tutor_message_limit] = lambda: 1
+
+
+def _ask(client: TestClient) -> int:
+    body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
+    return int(client.post("/api/tutor", json=body).status_code)
+
+
+def test_the_demo_code_opens_an_account_with_a_counted_allowance(two_codes: None) -> None:
+    alex = _alex()
+    assert alex.post("/api/redeem-invite", json={"code": DEMO_CODE}).status_code == 200
+
+    me = alex.get("/api/me").json()
+    assert me["is_demo"] is True
+    assert me["tutor_messages_left"] == 1
+    # The demo tier is only about the tutor: the money side of the app is untouched.
+    assert alex.get("/api/portfolio").json()["cash"] == 100000.0
+
+
+def test_the_private_code_still_opens_an_uncapped_account(two_codes: None) -> None:
+    alex = _alex()
+    assert alex.post("/api/redeem-invite", json={"code": INVITE_CODE}).status_code == 200
+
+    me = alex.get("/api/me").json()
+    assert me["is_demo"] is False
+    # None, not a number: a full account has no allowance to count down.
+    assert me["tutor_messages_left"] is None
+
+
+def test_a_wrong_code_is_refused_even_with_two_configured(two_codes: None) -> None:
+    assert _alex().post("/api/redeem-invite", json={"code": "not-it"}).status_code == 403
+
+
+def test_a_demo_account_gets_its_question_then_the_banner_marker(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+
+    assert _ask(alex) == 200
+    body = {"messages": [{"role": "user", "content": "and now?"}]}
+    refused = alex.post("/api/tutor", json=body)
+    assert refused.status_code == 403
+    # The marker the frontend keys off to swap the composer for the "ask me for a code"
+    # banner. Distinct from the 429 throttle, which means "slow down", not "you're done".
+    assert refused.json()["detail"]["code"] == "demo_limit_reached"
+    assert alex.get("/api/me").json()["tutor_messages_left"] == 0
+
+
+def test_the_streaming_route_spends_the_same_allowance(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    body = {"messages": [{"role": "user", "content": "how am I doing?"}]}
+
+    # The UI streams, so the cap has to bind there too, not only on the plain route.
+    assert alex.post("/api/tutor/stream", json=body).status_code == 200
+    assert alex.post("/api/tutor/stream", json=body).status_code == 403
+    assert alex.post("/api/tutor", json=body).status_code == 403
+
+
+def test_a_full_account_is_never_capped(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": INVITE_CODE})
+    for _ in range(5):
+        assert _ask(alex) == 200
+    assert alex.get("/api/me").json()["tutor_messages_left"] is None
+
+
+def test_the_allowance_is_per_user(two_codes: None) -> None:
+    alex, sam = _alex(), TestClient(app, headers={"Authorization": f"Bearer {TOKEN_SAM}"})
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    sam.post("/api/redeem-invite", json={"code": DEMO_CODE})
+
+    assert _ask(alex) == 200
+    assert _ask(alex) == 403
+    # Alex spending theirs must not touch Sam's.
+    assert _ask(sam) == 200
+
+
+def test_a_reset_does_not_hand_out_a_fresh_question(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    assert _ask(alex) == 200
+
+    # The whole reason the counter lives on the user and not the account: resetting wipes
+    # money, and if it wiped the allowance too the cap would be one click from useless.
+    assert alex.post("/api/account/reset").status_code == 200
+    assert _ask(alex) == 403
+
+
+def test_an_unconfigured_tutor_does_not_cost_a_question(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    app.dependency_overrides[get_tutor_provider] = lambda: None
+
+    assert _ask(alex) == 503
+    # Nothing was asked and nothing was spent, so the question is still there.
+    assert alex.get("/api/me").json()["tutor_messages_left"] == 1
+    app.dependency_overrides[get_tutor_provider] = lambda: FakeTutor()
+    assert _ask(alex) == 200
+
+
+def test_a_failed_tutor_call_refunds_the_question(two_codes: None) -> None:
+    class BrokenTutor(TutorProvider):
+        def complete(self, *, system: str, messages: object, tools: object) -> Completion:
+            raise TutorError("the model is having a bad day")
+
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    app.dependency_overrides[get_tutor_provider] = lambda: BrokenTutor()
+
+    assert _ask(alex) == 502
+    # Our fault, not theirs: an error that produced no answer gives the question back.
+    assert alex.get("/api/me").json()["tutor_messages_left"] == 1
+    app.dependency_overrides[get_tutor_provider] = lambda: FakeTutor()
+    assert _ask(alex) == 200
+
+
+def test_a_zero_limit_switches_the_demo_tutor_off(two_codes: None) -> None:
+    # The kill switch: drop the allowance to zero and demo accounts lose the tutor without
+    # anyone rotating the published code or shipping a deploy.
+    app.dependency_overrides[get_demo_tutor_message_limit] = lambda: 0
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    assert _ask(alex) == 403
+
+
+def test_the_two_codes_must_differ() -> None:
+    # A copy-paste that made them equal would quietly hand every holder of the published
+    # code an unrestricted account, and nothing would look wrong until the bill arrived.
+    with pytest.raises(ValidationError):
+        Settings(
+            finnhub_api_key="k",
+            database_url="postgresql://u:p@localhost:5432/db",
+            supabase_url="https://x.supabase.co",
+            signup_code="same",
+            demo_signup_code="same",
+        )
