@@ -421,9 +421,15 @@ class RedeemInviteRequest(BaseModel):
 
 
 class RedeemInviteOut(BaseModel):
-    """The result of redeeming: ``ok`` once the account is open (or already was)."""
+    """The result of redeeming: ``ok`` once the account is open (or already was).
+
+    ``is_demo`` reports the tier the account ended up on, which is what lets the tutor's
+    "already have a code?" form tell an upgrade from a no-op. Redeeming is deliberately
+    forgiving (a stale or wrong code on an account that already exists is not an error), so
+    the response has to say what happened rather than leaving the caller to guess."""
 
     status: Literal["ok"] = "ok"
+    is_demo: bool = False
 
 
 class WatchlistAddRequest(BaseModel):

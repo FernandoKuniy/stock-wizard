@@ -480,7 +480,7 @@ def test_redeeming_the_right_code_opens_a_funded_account(gated: str) -> None:
 
     redeemed = alex.post("/api/redeem-invite", json={"code": gated})
     assert redeemed.status_code == 200
-    assert redeemed.json() == {"status": "ok"}
+    assert redeemed.json() == {"status": "ok", "is_demo": False}
 
     portfolio = alex.get("/api/portfolio").json()
     assert portfolio["cash"] == 100000.0
@@ -1487,3 +1487,37 @@ def test_the_two_codes_must_differ() -> None:
             signup_code="same",
             demo_signup_code="same",
         )
+
+
+def test_a_demo_user_can_trade_up_with_the_private_code(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+    assert _ask(alex) == 200
+    assert _ask(alex) == 403
+
+    # The point of the banner: they email for the private code and redeem it on the account
+    # they already have. Without this the only way to lift a cap is editing the database.
+    upgraded = alex.post("/api/redeem-invite", json={"code": INVITE_CODE})
+    assert upgraded.status_code == 200
+    assert upgraded.json()["is_demo"] is False
+    assert alex.get("/api/me").json()["tutor_messages_left"] is None
+    assert _ask(alex) == 200
+
+
+def test_an_upgrade_only_ever_goes_upwards(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": INVITE_CODE})
+    # A stale tab replaying the demo code must not take a full account back down.
+    assert alex.post("/api/redeem-invite", json={"code": DEMO_CODE}).json()["is_demo"] is False
+    assert _ask(alex) == 200
+
+
+def test_a_wrong_code_on_an_existing_account_changes_nothing(two_codes: None) -> None:
+    alex = _alex()
+    alex.post("/api/redeem-invite", json={"code": DEMO_CODE})
+
+    # Still forgiving: a typo here is a no-op, not a lockout. The response reports the tier
+    # it left them on, which is how the banner knows the code didn't work.
+    stale = alex.post("/api/redeem-invite", json={"code": "not-it"})
+    assert stale.status_code == 200
+    assert stale.json()["is_demo"] is True

@@ -78,21 +78,41 @@ def redeem_invite(
     user who hasn't redeemed yet, the very people who need this route).
 
     A user who already has an account is waved through: redeeming twice is a harmless no-op, so
-    a double submit or a stale tab can never lock anyone out. Otherwise the code must match one
-    of the two configured ones (see ``_match_code``): the private code opens a full account, and
-    the publishable demo code opens one whose tutor has a small lifetime allowance. With no code
-    configured the gate is off and any signed-in user is simply provisioned, full tier.
+    a double submit or a stale tab can never lock anyone out. The one exception is an upgrade, a
+    demo user submitting the private code, which lifts their tutor cap.
+
+    Otherwise the code must match one of the two configured ones (see ``_match_code``): the
+    private code opens a full account, and the publishable demo code opens one whose tutor has a
+    small lifetime allowance. With no code configured the gate is off and any signed-in user is
+    simply provisioned, full tier.
 
     When ``seed_new_accounts`` is on (the hosted demo), a fresh account is filled with the
     sample six-month portfolio so it teaches from the first screen. Seeding is best-effort: if
     the market data can't be fetched the account just opens empty, because opening it is the
     part that must not fail.
     """
+    submitted = body.code.strip()
+
     existing = session.scalar(select(User).where(User.auth_id == identity.auth_id))
     if existing is not None:
-        return RedeemInviteOut()
+        # Already in, so this is a no-op with one exception that matters: a demo user who has
+        # since been sent the private code trades up to a full account here. That's the whole
+        # point of the banner in the tutor, and without it the only way to lift someone's cap
+        # would be editing the database by hand.
+        #
+        # Only ever upwards. A stale tab replaying the demo code can't take a full account
+        # back down, and a wrong code stays a harmless no-op rather than locking anyone out
+        # of an account they already have.
+        if (
+            existing.is_demo
+            and signup_code is not None
+            and hmac.compare_digest(submitted, signup_code)
+        ):
+            existing.is_demo = False
+            session.commit()
+        return RedeemInviteOut(is_demo=existing.is_demo)
 
-    is_demo = _match_code(body.code.strip(), full=signup_code, demo=demo_code)
+    is_demo = _match_code(submitted, full=signup_code, demo=demo_code)
 
     user = get_or_create_user(session, auth_id=identity.auth_id, email=identity.email)
     user.is_demo = is_demo
@@ -107,7 +127,7 @@ def redeem_invite(
             # rather than failing the signup outright.
             logger.warning("Could not seed a new account with sample history: %s", exc)
     session.commit()
-    return RedeemInviteOut()
+    return RedeemInviteOut(is_demo=is_demo)
 
 
 def _match_code(submitted: str, *, full: str | None, demo: str | None) -> bool:
