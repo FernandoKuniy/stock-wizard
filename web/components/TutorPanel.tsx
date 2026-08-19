@@ -74,53 +74,59 @@ export function TutorPanel({ messagesLeft = null }: { messagesLeft?: number | nu
         <span className="sm:hidden">Ask</span>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Clicking away closes it. It's a panel, not a decision, so it shouldn't trap you. */}
-          <button
-            type="button"
-            aria-label="Close the tutor"
-            onClick={close}
-            className="absolute inset-0 bg-zinc-900/20 backdrop-blur-[1px] dark:bg-zinc-950/50"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Ask the tutor"
-            className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
-          >
-            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
-              <h2 className="text-sm font-semibold">Ask the tutor</h2>
-              <button
-                type="button"
-                onClick={close}
-                aria-label="Close the tutor"
-                className="rounded-md px-2 py-1 text-lg leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-              >
-                ×
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <Tutor
-                pending={pending}
-                onPendingHandled={clearPending}
-                messagesLeft={messagesLeft}
-              />
-            </div>
-            {/* The glossary lives behind the panel rather than in the nav: it's the same
+      {/* Rendered even while closed, so the conversation survives being closed and reopened.
+          Unmounting it was what threw the thread away every time.
+
+          Hidden two ways on purpose. The `hidden` attribute is the semantic one and is what
+          keeps it out of the accessibility tree and the tab order, but Tailwind's `flex` sets
+          a display and would beat the browser's own `[hidden]` rule, so the class has to do
+          the hiding when it's open-styled. Together they agree in every environment. */}
+      <div hidden={!open} className={open ? "fixed inset-0 z-50 flex justify-end" : "hidden"}>
+        {/* Clicking away closes it. It's a panel, not a decision, so it shouldn't trap you. */}
+        <button
+          type="button"
+          aria-label="Close the tutor"
+          onClick={close}
+          className="absolute inset-0 bg-zinc-900/20 backdrop-blur-[1px] dark:bg-zinc-950/50"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ask the tutor"
+          className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+        >
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+            <h2 className="text-sm font-semibold">Ask the tutor</h2>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close the tutor"
+              className="rounded-md px-2 py-1 text-lg leading-none text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            >
+              ×
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <Tutor
+              open={open}
+              pending={pending}
+              onPendingHandled={clearPending}
+              messagesLeft={messagesLeft}
+            />
+          </div>
+          {/* The glossary lives behind the panel rather than in the nav: it's the same
                 "I don't know what that means" moment, and the nav stays at three places. */}
-            <div className="shrink-0 border-t border-zinc-200 px-5 py-2.5 dark:border-zinc-800">
-              <Link
-                href="/glossary"
-                onClick={close}
-                className="text-xs text-zinc-500 hover:underline"
-              >
-                Or look a word up in plain English →
-              </Link>
-            </div>
+          <div className="shrink-0 border-t border-zinc-200 px-5 py-2.5 dark:border-zinc-800">
+            <Link
+              href="/glossary"
+              onClick={close}
+              className="text-xs text-zinc-500 hover:underline"
+            >
+              Or look a word up in plain English →
+            </Link>
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 }

@@ -20,17 +20,22 @@ const FALLBACK = "I couldn't put an answer together just now. Try asking again."
 const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the market?"];
 
 /**
- * The tutor conversation. Lives inside TutorPanel, which is mounted in the root layout, so
- * the thread survives moving between pages and is only lost on a full reload. That matches
- * the design: nothing is stored server-side, the whole thread is re-sent each turn.
+ * The tutor conversation. Lives inside TutorPanel, which is mounted in the root layout and
+ * keeps this rendered even while the panel is closed, so the thread survives both moving
+ * between pages and closing the panel. It goes on a full reload, or when the user clears it
+ * with "New chat". That matches the design: nothing is stored server-side, and the whole
+ * thread is re-sent each turn.
  *
  * Fills its container rather than sizing itself, because the panel owns the height.
  */
 export function Tutor({
+  open = true,
   pending,
   onPendingHandled,
   messagesLeft = null,
 }: {
+  /** Whether the panel holding this is on screen. Drives focus, not rendering. */
+  open?: boolean;
   pending?: { text: string; key: number } | null;
   /** Called once the pending question has been taken, so it can't be asked twice. */
   onPendingHandled?: () => void;
@@ -41,6 +46,8 @@ export function Tutor({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Two-step confirm for clearing the thread, since nothing here is saved anywhere.
+  const [confirmingNew, setConfirmingNew] = useState(false);
   // Tracked locally as well as from the server: the layout that fetched the count doesn't
   // re-render when a question is asked, so the panel counts its own down and only reloads
   // the server's answer when the tier actually changes.
@@ -56,13 +63,29 @@ export function Tutor({
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, busy]);
 
-  // Opening the panel should put the cursor where you're about to type.
+  // Opening the panel should put the cursor where you're about to type. Keyed on `open`
+  // rather than on mount: this component now stays mounted while the panel is closed (so the
+  // conversation survives), and focusing on mount would steal the cursor on every page load.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
   // A demo account counts down; a full one stays null and never spends anything.
   const spend = () => setLeft((n) => (n === null ? null : Math.max(0, n - 1)));
+
+  /**
+   * Throw the conversation away and start fresh.
+   *
+   * Only the thread goes. The remaining allowance deliberately does not reset: questions are
+   * spent on the server, and a new chat is a fresh page, not a refill.
+   */
+  function startNewChat() {
+    setMessages([]);
+    setInput("");
+    setError(null);
+    setConfirmingNew(false);
+    inputRef.current?.focus();
+  }
 
   async function send(text: string) {
     const question = text.trim();
@@ -130,10 +153,9 @@ export function Tutor({
   // An "explain this" button elsewhere can hand us a question. Send it once (keyed so
   // React's dev double-run doesn't fire it twice), after any in-flight answer finishes.
   //
-  // Telling the panel we've taken it is what makes it a genuine one-shot. This component is
-  // unmounted whenever the panel closes, so `handledKey` is gone by the time it reopens while
-  // the question, which lives in the panel, is not. Without this the same question fired again
-  // on every reopen, forever.
+  // Telling the panel we've taken it is what makes it a genuine one-shot, rather than relying
+  // on `handledKey` surviving. That guard used to be lost on every reopen, back when closing
+  // the panel unmounted this component, and the same question fired again each time.
   useEffect(() => {
     if (pending && pending.key !== handledKey.current && !busy) {
       handledKey.current = pending.key;
@@ -164,12 +186,49 @@ export function Tutor({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
         <p className="text-xs text-zinc-500">
           It reads your real portfolio and explains it in plain English. A simulation for learning,
           not financial advice.
         </p>
+        {/* Only worth offering once there's something to lose. Matches the two-step confirm
+            the reset button uses, rather than a browser dialog the app never uses elsewhere. */}
+        {messages.length > 0 &&
+          (confirmingNew ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={startNewChat}
+                className="rounded-md bg-zinc-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                Yes, clear it
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingNew(false)}
+                className="rounded-md px-2 py-1 text-xs whitespace-nowrap text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingNew(true)}
+              disabled={busy}
+              className="shrink-0 rounded-md border border-zinc-200 px-2 py-1 text-xs whitespace-nowrap text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              New chat
+            </button>
+          ))}
       </div>
+
+      {confirmingNew && messages.length > 0 && (
+        <p className="shrink-0 border-b border-zinc-200 bg-zinc-50 px-5 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+          Starting a new chat clears this conversation. It isn&apos;t saved anywhere, so it&apos;s
+          gone for good.
+        </p>
+      )}
 
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (
