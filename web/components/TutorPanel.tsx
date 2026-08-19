@@ -14,7 +14,7 @@ import { Tutor } from "./Tutor";
  * from everywhere, including a stock page, which is exactly where "what does P/E mean?"
  * actually gets asked. The layout persists across navigation, so the conversation does too.
  */
-export function TutorPanel() {
+export function TutorPanel({ messagesLeft = null }: { messagesLeft?: number | null }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   // A question handed to us by an "explain this" button, keyed so the same finding can be
@@ -91,7 +91,7 @@ export function TutorPanel() {
               </button>
             </div>
             <div className="min-h-0 flex-1">
-              <Tutor pending={pending} />
+              <Tutor pending={pending} messagesLeft={messagesLeft} />
             </div>
             {/* The glossary lives behind the panel rather than in the nav: it's the same
                 "I don't know what that means" moment, and the nav stays at three places. */}

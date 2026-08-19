@@ -58,9 +58,14 @@ export default async function RootLayout({
   // search, nav, or tutor. `provisioned` is what tells the two apart. If the probe fails we
   // fall back to hiding the chrome, since it wouldn't work without an account anyway.
   let provisioned = false;
+  // Null for a full account (no cap) and a count for a demo one, which is what the tutor
+  // panel needs to show the allowance and swap in the "ask me for a code" banner at zero.
+  let tutorMessagesLeft: number | null = null;
   if (user) {
     try {
-      provisioned = (await getMe(await getAccessToken())).provisioned;
+      const me = await getMe(await getAccessToken());
+      provisioned = me.provisioned;
+      tutorMessagesLeft = me.tutor_messages_left;
     } catch {
       provisioned = false;
     }
@@ -110,7 +115,7 @@ export default async function RootLayout({
               <Nav />
               <div className="flex items-center gap-2">
                 <CalmToggle />
-                <TutorPanel />
+                <TutorPanel messagesLeft={tutorMessagesLeft} />
               </div>
             </div>
           )}

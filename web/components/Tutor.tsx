@@ -1,9 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { askTutor, streamTutor, type TutorMessage } from "@/lib/api";
+import {
+  askTutor,
+  isDemoLimitReached,
+  redeemInvite,
+  streamTutor,
+  type TutorMessage,
+} from "@/lib/api";
 import { getAccessToken } from "@/lib/supabase/client";
+import { DemoLimitBanner } from "./DemoLimitBanner";
 import { Markdown } from "./Markdown";
 
 const FALLBACK = "I couldn't put an answer together just now. Try asking again.";
@@ -18,11 +26,23 @@ const SUGGESTIONS = ["How am I doing?", "Am I diversified?", "Am I beating the m
  *
  * Fills its container rather than sizing itself, because the panel owns the height.
  */
-export function Tutor({ pending }: { pending?: { text: string; key: number } | null }) {
+export function Tutor({
+  pending,
+  messagesLeft = null,
+}: {
+  pending?: { text: string; key: number } | null;
+  /** A demo account's remaining questions, or null for a full account with no cap. */
+  messagesLeft?: number | null;
+}) {
   const [messages, setMessages] = useState<TutorMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracked locally as well as from the server: the layout that fetched the count doesn't
+  // re-render when a question is asked, so the panel counts its own down and only reloads
+  // the server's answer when the tier actually changes.
+  const [left, setLeft] = useState<number | null>(messagesLeft);
+  const router = useRouter();
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const sendRef = useRef<(text: string) => void>(() => {});
@@ -38,9 +58,14 @@ export function Tutor({ pending }: { pending?: { text: string; key: number } | n
     inputRef.current?.focus();
   }, []);
 
+  // A demo account counts down; a full one stays null and never spends anything.
+  const spend = () => setLeft((n) => (n === null ? null : Math.max(0, n - 1)));
+
   async function send(text: string) {
     const question = text.trim();
-    if (question === "" || busy) return;
+    // Out of questions is a dead end here, not an error: the banner below the thread is
+    // already saying so, and an "explain this" button elsewhere shouldn't fire into a 403.
+    if (question === "" || busy || left === 0) return;
 
     const next: TutorMessage[] = [...messages, { role: "user", content: question }];
     setMessages(next);
@@ -60,6 +85,7 @@ export function Tutor({ pending }: { pending?: { text: string; key: number } | n
         show(answer);
       });
       if (answer === "") show(FALLBACK); // the model returned nothing
+      spend();
     } catch (e) {
       if (answer !== "") {
         // Some of the reply had already arrived; keep it and note it stopped short.
@@ -70,8 +96,16 @@ export function Tutor({ pending }: { pending?: { text: string; key: number } | n
       try {
         const { reply } = await askTutor(next, await getAccessToken());
         show(reply);
+        spend();
       } catch (fallbackError) {
         setMessages(next); // drop the empty bubble
+        // Out of questions isn't a failure, it's the end of the allowance, so it gets the
+        // banner rather than a red line. Checked on both errors because the stream is what
+        // refused first and the fallback only repeated it.
+        if (isDemoLimitReached(fallbackError) || isDemoLimitReached(e)) {
+          setLeft(0);
+          return;
+        }
         setError(
           fallbackError instanceof Error
             ? fallbackError.message
@@ -98,6 +132,22 @@ export function Tutor({ pending }: { pending?: { text: string; key: number } | n
       void sendRef.current(pending.text);
     }
   }, [pending, busy]);
+
+  // Trade a code for an uncapped tutor. Redeeming is forgiving by design, so a wrong code
+  // comes back ok and still on the demo tier; that's what tells us it didn't work.
+  async function upgrade(code: string): Promise<string | null> {
+    try {
+      const { is_demo } = await redeemInvite(code, await getAccessToken());
+      if (is_demo) return "That code didn't unlock it. Check it and try again.";
+    } catch (e) {
+      return e instanceof Error ? e.message : "That didn't work. Try again.";
+    }
+    setLeft(null);
+    // The layout read the old tier on its last render, so refresh it rather than leaving the
+    // rest of the app believing this is still a demo account.
+    router.refresh();
+    return null;
+  }
 
   // Show "Thinking…" only until the first token lands, not through the whole stream.
   const last = messages[messages.length - 1];
@@ -157,30 +207,42 @@ export function Tutor({ pending }: { pending?: { text: string; key: number } | n
         <div ref={endRef} />
       </div>
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send(input);
-        }}
-        className="flex shrink-0 items-center gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800"
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Ask about your portfolio…"
-          aria-label="Ask the tutor a question"
-          className="w-full bg-transparent text-sm outline-none"
-        />
-        <button
-          type="submit"
-          disabled={busy || input.trim() === ""}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+      {left === 0 ? (
+        <DemoLimitBanner onUpgrade={upgrade} />
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void send(input);
+          }}
+          className="shrink-0 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800"
         >
-          Ask
-        </button>
-      </form>
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Ask about your portfolio…"
+              aria-label="Ask the tutor a question"
+              className="w-full bg-transparent text-sm outline-none"
+            />
+            <button
+              type="submit"
+              disabled={busy || input.trim() === ""}
+              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              Ask
+            </button>
+          </div>
+          {/* Say the allowance up front rather than letting it run out as a surprise. */}
+          {left !== null && (
+            <p className="mt-1.5 text-xs text-zinc-400">
+              {left === 1 ? "One question" : `${left} questions`} left on the demo code.
+            </p>
+          )}
+        </form>
+      )}
     </div>
   );
 }
