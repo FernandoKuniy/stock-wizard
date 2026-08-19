@@ -35,6 +35,14 @@ export async function proxy(request: NextRequest) {
   const signedIn = Boolean(data?.claims);
 
   const { pathname } = request.nextUrl;
+
+  // The email confirmation link lands under /auth, and that request has to run whatever the
+  // session state is. Signed out, it's the request that creates the session, so guarding it
+  // would send every confirmation link back to /login, the exact loop it exists to break.
+  // Signed in, it still has to run rather than being bounced to the dashboard, or clicking a
+  // link twice would skip the redeem it does on the way through. It redirects on its own.
+  if (pathname.startsWith("/auth")) return response;
+
   const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
   if (!signedIn && !isPublic) {
