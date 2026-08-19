@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 import Link from "next/link";
 
 import { CalmToggle } from "@/components/CalmToggle";
@@ -16,15 +16,32 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const description =
+  "Learn investing with fake money and real market prices. A simulation for education, not financial advice.";
 
+// Social cards need absolute URLs, so Next needs a base to resolve them against. The deployed
+// site is the default: a preview build with no env var set should still advertise the real
+// thing rather than localhost.
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://stockwiz.vercel.app";
+
+// `opengraph-image.tsx` fills in the image tags for both cards on its own, so there's no
+// image to name here.
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Stock Wizard",
-  description:
-    "Learn investing with fake money and real market prices. A simulation for education, not financial advice.",
+  description,
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Stock Wizard",
+    title: "Stock Wizard",
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stock Wizard",
+    description,
+  },
 };
 
 export default async function RootLayout({
@@ -50,7 +67,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
       <head>
         {/* Set calm mode before the first paint. Doing it in an effect would flash the
             balance on every load, which is the exact thing calm mode exists to prevent. */}

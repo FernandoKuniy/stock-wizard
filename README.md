@@ -101,6 +101,8 @@ Frontend (`web/.env.local`):
   settings. Both are public and safe in the browser. Use the publishable key (`sb_publishable_...`),
   never the secret key.
 - `NEXT_PUBLIC_API_URL`: defaults to `http://localhost:8000`.
+- `NEXT_PUBLIC_SITE_URL`: optional, the site's own public URL. Only the social preview card needs
+  it, to build absolute links; it defaults to the deployed URL, so leave it unset locally.
 
 Your Supabase project needs **JWT signing keys** enabled (asymmetric ES256 or RS256, the default for
 new projects); the API rejects the legacy shared HS256 secret. For local development, turn off email
