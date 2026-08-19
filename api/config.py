@@ -7,6 +7,7 @@ Never log or echo these values: they hold secrets (the Finnhub key and the DB UR
 from decimal import Decimal
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -39,6 +40,17 @@ class Settings(BaseSettings):
     # market, tutor, or portfolio routes) until they redeem the code once. This is what
     # keeps a public demo from being open to every passer-by and bot. See auth.py.
     signup_code: str | None = None
+    # A second invite code, safe to publish (it goes in the README). It opens a real account
+    # with one difference: the AI tutor, the only route that costs us money per call, is
+    # capped at ``demo_tutor_message_limit`` questions for the life of the account, and the
+    # UI then points the user at the author's site to ask for the unrestricted code. Only
+    # meaningful when ``signup_code`` is also set: with the gate off, everyone is full tier.
+    demo_signup_code: str | None = None
+    # How many tutor questions a demo account gets, ever. Not a rate: a lifetime allowance,
+    # counted in Postgres, because the in-process limiter in ratelimit.py resets whenever the
+    # instance restarts and could never hold a lifetime cap. Set it to 0 to switch the demo
+    # tutor off entirely without touching the code or rotating the published code.
+    demo_tutor_message_limit: int = 1
     # A light per-account cap on tutor calls per minute. The tutor is the one route that
     # costs us real money per call, so this stops one account (or a leaked invite code) from
     # looping it and running up the OpenAI bill. Generous enough that a person asking
@@ -57,6 +69,20 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     # Fake starting cash for a new account. A round number feels less intimidating.
     starting_balance: Decimal = Decimal("100000")
+
+    @model_validator(mode="after")
+    def _codes_must_differ(self) -> "Settings":
+        """Refuse to boot if the published demo code is also the private one.
+
+        Worth failing loudly for: a copy-paste that made them equal would quietly hand every
+        holder of the published code an unrestricted account, and nothing in the app would
+        look wrong until the bill arrived.
+        """
+        full = (self.signup_code or "").strip()
+        demo = (self.demo_signup_code or "").strip()
+        if full and demo and full == demo:
+            raise ValueError("DEMO_SIGNUP_CODE must not be the same as SIGNUP_CODE")
+        return self
 
     @property
     def frontend_origins(self) -> list[str]:

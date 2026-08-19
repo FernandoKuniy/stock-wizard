@@ -157,6 +157,21 @@ def get_signup_code() -> str | None:
     return code or None
 
 
+def get_demo_signup_code() -> str | None:
+    """The publishable demo code, or None when there isn't one.
+
+    A dependency for the same reason ``get_signup_code`` is one: tests can hand out a code
+    without touching the process environment. Blank counts as unset.
+    """
+    code = (get_settings().demo_signup_code or "").strip()
+    return code or None
+
+
+def get_demo_tutor_message_limit() -> int:
+    """How many tutor questions a demo account gets for its lifetime."""
+    return get_settings().demo_tutor_message_limit
+
+
 def get_current_user(
     identity: Annotated[AuthIdentity, Depends(get_auth_identity)],
     session: Annotated[Session, Depends(get_db)],
