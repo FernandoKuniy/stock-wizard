@@ -125,6 +125,44 @@ one chokepoint every `/api` route already passes through:
   reports `{email, provisioned}`. The frontend layout uses it to show the redeem screen's bare
   header rather than the full app chrome for someone who is signed in but not yet let in.
 
+### The demo tier
+
+A second code, `DEMO_SIGNUP_CODE`, is **published in the README**. It opens a real account with
+one restriction: the AI tutor, the only route that costs money per call, has a lifetime allowance
+of `DEMO_TUTOR_MESSAGE_LIMIT` questions (default 1). Trading, charts, dividends, recurring buys
+and the glossary are untouched, because none of them cost anything a cache doesn't already cover.
+
+- `_match_code` (routers/account.py) checks the submitted code against both, in constant time,
+  and a wrong code always runs both comparisons so a near miss on one can't be told from the
+  other. Settings refuses to start if the two codes are equal, which would otherwise quietly hand
+  every holder of the published code an unrestricted account.
+- The tier is stored as `users.is_demo`, and the spend as `users.tutor_messages_used`. **Both on
+  the user, not the account, deliberately**: `POST /api/account/reset` wipes account data, and a
+  counter living there would hand out a fresh allowance on every reset. Same reasoning
+  achievements use for surviving a reset.
+- **The allowance cannot live in `ratelimit.py`.** That limiter is in-process and fixed-window,
+  so it resets on every restart; on a free instance that is often. A lifetime cap has to be in
+  Postgres. The per-minute limiter stays as what it always was, a burst guard against a runaway
+  loop, and applies to both tiers.
+- Enforcement is two-layered. `check_demo_tutor_allowance` is a dependency that 403s early with
+  `{"code": "demo_limit_reached"}` for the UI, but it is explicitly **not** the guard: two
+  concurrent calls could both pass it. The guard is a single conditional
+  `UPDATE ... WHERE tutor_messages_used < limit` whose row count says whether we won the race.
+- The spend happens as late as possible, immediately before the provider call, so a missing
+  OpenAI key (503) or a malformed body (400) never costs anyone their question. A provider
+  failure on the non-streaming route refunds it. A failure part-way through a **stream** does
+  not: by then the request and its session are gone, and refunding would mean opening a second
+  session from inside the response body. Accepted, and the banner offers a way to ask for a
+  full code.
+- Upgrades run through the same redeem route: a demo user who submits the private code is moved
+  to the full tier. **Only upwards**, so a stale tab replaying the demo code can't downgrade a
+  full account, and a wrong code stays a no-op rather than a lockout. `RedeemInviteOut` reports
+  the resulting tier, which is how the UI tells a real upgrade from a forgiving no-op.
+- `GET /api/me` carries `is_demo` and `tutor_messages_left` (null for a full account). The layout
+  already fetches it on every render, so the tutor panel costs no extra request. Setting the
+  limit to `0` is the kill switch: it is compared per request, so it takes effect on restart
+  without rotating the published code or changing any code.
+
 This is upstream of, and independent from, the account-scoping boundary below: scoping keeps one
 account's money out of another's; the gate decides who gets an account at all. Frontend: an
 invite field on signup redeems in the same step when email confirmation is off, a `/redeem`

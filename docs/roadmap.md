@@ -283,7 +283,47 @@ Explicit non-goals across M7-M12 (same reasoning the earlier ones use): real-tim
 ticking (contradicts calm mode), forward return projections (edge toward advice), and Redis or any
 shared-cache infrastructure (over-engineering for an invite-only demo).
 
+## M13. A demo code anyone can use
+
+The app was invite-only with "reach out for a code", which meant a recruiter who wouldn't email
+never got in at all. A second, published code fixes that without opening the one cost that scales
+per visitor.
+
+- [x] A publishable `DEMO_SIGNUP_CODE` alongside the private one. It opens a real, funded,
+      sample-seeded account: trading, charts, dividends, recurring buys and the glossary all work
+      exactly as they do for anyone else. Both codes are compared in constant time, and the app
+      refuses to start if they're equal.
+- [x] The **AI tutor** is the only thing capped, at `DEMO_TUTOR_MESSAGE_LIMIT` questions (default
+      1) for the life of the account. Counted in Postgres on the **user** row, not the account, so
+      a reset can't hand out a fresh allowance, and not in `ratelimit.py`, whose fixed window
+      resets on every restart. Enforced by a conditional UPDATE so two concurrent calls can't both
+      get through, and spent immediately before the provider call so a 503 or a 400 costs nothing.
+- [x] A banner replaces the tutor's composer at zero: what's still open, and a link to ask for an
+      uncapped code. `POST /api/redeem-invite` upgrades a demo user who submits the private code,
+      only ever upwards, so the funnel actually completes instead of dead-ending.
+- [x] `DEMO_TUTOR_MESSAGE_LIMIT=0` as a kill switch, read per request, so the demo tutor can be
+      switched off without rotating the published code.
+
+Explicit non-goals: a global or Redis-backed rate limiter (the OpenAI billing cap already
+backstops the catastrophic case, and shared-cache infrastructure stays off the table), and any
+cap on trading or market data (a demo account browsing tickers costs the same as anyone else, and
+the caches absorb it).
+
 ## Progress log
+
+- 2026-08-19  **M13: a demo code anyone can use.** The README now publishes an invite code, so the
+  live link is something a stranger can actually try instead of a form asking them to email first.
+  The tutor is the only capped thing (one question, `users.tutor_messages_used`), because it's the
+  only route billed per call: the seeding and quote costs are absorbed by the market cache, which
+  the keep-warm ping now keeps alive. Two design points worth remembering: the counter **cannot**
+  live in `ratelimit.py` (fixed window, per process, resets on every free-tier restart) and
+  **cannot** live on the account (a reset would clear it), and the 403 dependency is a courtesy for
+  the UI, not the guard, which is a conditional UPDATE whose row count decides the race. Also added
+  the upgrade path, without which the banner told people to ask for a code they had nowhere to
+  enter. Found and fixed a latent bug on the way: `vitest.setup.ts` never registered `cleanup`, so
+  every render piled up in one document for the whole file, passing only because each test happened
+  to query unique text. 412 backend tests green (15 new); 26 frontend (5 new); ruff, mypy, eslint,
+  prettier, tsc and a production build all clean.
 
 - 2026-08-19  **Portfolio polish: brand assets, social card, and the README screenshots.** A real
   favicon, iOS icon, and 1200x630 preview card, all drawn from one SVG mark in `lib/brand.ts` and

@@ -6,6 +6,11 @@ Format: `YYYY-MM-DD  what changed  (why)`
 
 ## Decisions
 
+- 2026-08-19  A second, **published** invite code (`DEMO_SIGNUP_CODE`) opens a "demo" account whose AI tutor has a lifetime allowance (`DEMO_TUTOR_MESSAGE_LIMIT`, default 1), replacing "invite-only, email me for a code" as the way a stranger tries the app (a recruiter who has to email first mostly won't, so the demo was effectively unreachable; capping only the tutor keeps the whole product open while bounding the one cost that scales per call).
+- 2026-08-19  The tutor allowance is counted in Postgres (`users.tutor_messages_used`) rather than the in-process limiter in `ratelimit.py`, and lives on the **user** rather than the account (the limiter is fixed-window and per-process, so on a free instance it resets constantly and could never hold a lifetime cap; and a counter on the account would be cleared by `POST /api/account/reset`, making the cap one click from useless).
+- 2026-08-19  The allowance is enforced by a conditional `UPDATE ... WHERE tutor_messages_used < limit` and spent immediately before the provider call, not by the 403 dependency that precedes it (the dependency is a fast, machine-readable answer for the UI but two concurrent calls could both pass it; and spending late means a 503 or a 400 never costs anyone their question). A failure part-way through a stream keeps the charge, since the request's session is gone by then.
+- 2026-08-19  `POST /api/redeem-invite` now upgrades a demo user who submits the private code, and `RedeemInviteOut` reports the resulting tier (without it the funnel dead-ends: the banner tells people to ask for a code and there was nowhere to enter one; the tier in the response is what lets the UI tell an upgrade from redeeming's deliberately forgiving no-op). Upgrades only ever go upwards.
+
 - 2026-08-15  **Frontend tests are a Vitest component/unit suite; the signed-in end-to-end
   click-through stays a documented manual step.** The frontend gap was "no tests at all", and the
   highest-value, immediately-runnable fix is Vitest + Testing Library over the pure helpers and the
