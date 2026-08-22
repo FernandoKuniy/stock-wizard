@@ -97,13 +97,26 @@ Now that both URLs exist:
 
 The free Render instance spins down after ~15 minutes idle, and the Supabase project pauses after
 7 days with no database activity. The [`keep-warm`](../.github/workflows/keep-warm.yml) workflow
-pings `/health/ready` (a `SELECT 1`) every 10 minutes to hold both awake.
+pings `/health/ready` (a `SELECT 1`) to hold both awake.
 
 - GitHub → **Settings → Secrets and variables → Actions → Variables** → add `API_HEALTH_URL` =
   `<Render URL>/health/ready`.
 
 Until the variable is set, the workflow no-ops. Note: GitHub runs scheduled workflows only on the
 default branch, and disables the schedule after 60 days with no repo activity.
+
+**The schedule is a request, not a promise.** The cron asks for every 10 minutes; measured over 200
+real runs GitHub delivered a median of one every 34 minutes, and once went 112. So each run pings
+seven times, five minutes apart, covering about 30 minutes from inside the job, where nothing
+throttles it. That is what actually keeps Render warm. A run fails only if *every* ping failed,
+since a single 502 while the instance boots is noise, not an outage.
+
+Keeping Supabase unpaused is the easy half: even the worst observed gap is far inside the 7-day
+window. Waking Render is the hard half, and the honest ceiling here is that a gap longer than
+~30 minutes still lets it go cold. If you want true cadence, point an external uptime monitor at
+the same URL. Do not move this into a Supabase `pg_cron` job: a paused project stops running its
+own cron, so the watchdog would die with the thing it is meant to protect, and `pg_net` is
+fire-and-forget, so nothing would email you when it broke.
 
 ## 6. Smoke test
 

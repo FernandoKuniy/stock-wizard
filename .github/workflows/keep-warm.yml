@@ -2,8 +2,15 @@ name: Keep warm
 
 # The free Render web instance spins down after ~15 minutes idle, and the Supabase free project
 # pauses after 7 days with no database activity. Pinging the readiness check (which runs a
-# SELECT 1) on a schedule holds both awake, so a recruiter who clicks the link never lands on a
-# cold start or a paused project.
+# SELECT 1) holds both awake, so a recruiter who clicks the link never lands on a cold start or
+# a paused project.
+#
+# The cron below asks for every 10 minutes and GitHub does not deliver it. Measured over 200
+# runs the real gap was a median of 34 minutes and as much as 112, so 97% of pings arrived
+# after Render had already spun down. That's why each run now pings on a loop from the inside:
+# the schedule is throttled, but the job itself is not. Seven pings five minutes apart covers
+# roughly the median gap, and the loop is free because Actions minutes are unlimited on a
+# public repo.
 #
 # Set the repo variable API_HEALTH_URL (Settings -> Secrets and variables -> Actions -> Variables)
 # to the deployed readiness URL, e.g. https://stock-wizard-api.onrender.com/health/ready. Until
@@ -18,15 +25,57 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    # The loop runs ~30 minutes. The cap is headroom for that, not a target.
+    timeout-minutes: 45
     steps:
-      - name: Ping the readiness check
+      - name: Ping the readiness check on a loop
+        env:
+          URL: ${{ vars.API_HEALTH_URL }}
+          PINGS: "7"
+          INTERVAL: "300"
         run: |
-          url="${{ vars.API_HEALTH_URL }}"
-          if [ -z "$url" ]; then
+          if [ -z "$URL" ]; then
             echo "API_HEALTH_URL is not set yet; nothing to ping. Set it after deploying."
             exit 0
           fi
-          # A warm instance answers in under a second, but a cold one has to boot first and
-          # takes well over 30s. That's the exact case this job exists to fix, so the timeout
-          # has to outlast a cold start or the first ping after any gap fails on its own.
-          curl -fsS --max-time 120 --retry 2 --retry-all-errors --retry-delay 15 "$url" && echo " -- ok"
+
+          ok=0
+          failed=0
+          for i in $(seq 1 "$PINGS"); do
+            [ "$i" -gt 1 ] && sleep "$INTERVAL"
+
+            # Retries have to outlast a cold boot. Render usually holds the request open while
+            # it wakes (~50s), but sometimes its edge returns 502/503 straight away instead,
+            # and those fail instantly without ever touching --max-time. Six attempts 20s apart
+            # covers ~100s, so a boot can finish inside the retry budget. The old 2 retries at
+            # 15s gave up after 30s, which is how a waking instance failed the job that exists
+            # to keep it awake.
+            #
+            # -w logs the status and timing, so the log shows a cold boot (tens of seconds)
+            # apart from a warm hit (well under a second). Without it a failure said only
+            # "error: 503" and there was no way to tell Render's 503 from our own
+            # "Database unavailable" one.
+            if out=$(curl -fsS -o /dev/null -w 'http=%{http_code} in %{time_total}s' \
+                --max-time 120 --retry 5 --retry-delay 20 --retry-all-errors "$URL" 2>&1); then
+              ok=$((ok + 1))
+              result=ok
+            else
+              failed=$((failed + 1))
+              result=FAILED
+            fi
+            # curl's error goes to stderr and -w's summary to stdout, so a failure spans two
+            # lines. Flatten it to keep one line per ping, which is what makes a run scannable.
+            echo "ping $i/$PINGS: $result, ${out//$'\n'/ }"
+          done
+
+          echo "$ok ok, $failed failed, over $(( (PINGS - 1) * INTERVAL / 60 )) minutes"
+
+          # Fail only when nothing got through. One blip during a boot is noise and used to
+          # email that every job had failed; a whole window with no answer is a real outage.
+          if [ "$ok" -eq 0 ]; then
+            echo "::error::Every ping failed. The api looks genuinely down."
+            exit 1
+          fi
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::$failed of $PINGS pings failed. Transient if the rest answered."
+          fi
